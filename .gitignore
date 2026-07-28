@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data & results
+datasets/
+data_cache/
+checkpoints/
+results/
+logs/
+runs/
+outputs/
+*.csv
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+
+# Figures
+figures/
+*.png
+*.pdf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Experiment artifacts
+configs/local_*.yaml
+wandb/
+
+# Cloned S-Mamba official repo (for reference only, not part of deploy)
+s_mamba_official/

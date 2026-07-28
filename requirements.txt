@@ -1,0 +1,29 @@
+# QCC-Mamba 依赖
+# 服务器安装：uv pip install -r requirements.txt
+# 如需 CUDA 版 PyTorch，请改用对应 index-url：
+#   uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# 或 cu121/cu124，根据服务器 CUDA 版本选择。
+
+# --- 核心 ---
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0  # evaluate.py 用 ttest_rel(alternative=...)，要求 >=1.6
+pyyaml>=6.0
+tqdm>=4.65.0
+
+# --- 深度学习 ---
+torch>=2.0.0
+
+# --- S-Mamba backbone ---
+mamba-ssm>=2.0.0  # 官方 Mamba SSM 层，需要 CUDA 和 Linux
+# 安装方式：uv pip install mamba-ssm[causal-conv1d]
+
+# --- 可视化（Fourier 频谱分析 E7） ---
+matplotlib>=3.7.0
+
+# --- 可选：真机附录 E8（NISQ 验证） ---
+# qiskit>=1.0.0
+# qiskit-ibm-runtime>=0.25.0
+
+# --- 可选：替代模拟后端 ---
+# pennylane>=0.35.0
