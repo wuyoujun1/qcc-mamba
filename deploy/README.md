@@ -36,28 +36,32 @@ cd qcc_mamba
 nvidia-smi | grep "CUDA Version"
 ```
 
-### 安装 Miniconda（如果没有）
-```bash
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh -b -p ~/miniconda3
-~/miniconda3/bin/conda init bash
-source ~/.bashrc
-```
+### 用 uv 创建虚拟环境并安装依赖
 
-### 创建虚拟环境并安装依赖
+> 确保服务器已安装 `uv`（如果没有：`curl -LsSf https://astral.sh/uv/install.sh | sh`）
+
 ```bash
-# 创建环境
-conda create -n qcc_mamba python=3.11 -y
-conda activate qcc_mamba
+# 创建 Python 3.11 虚拟环境
+uv venv --python 3.11
+source .venv/bin/activate
 
 # 安装 PyTorch（根据 CUDA 版本选择，以下以 CUDA 12.1 为例）
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# 安装 mamba-ssm（需要 Linux + CUDA，耗时 2-5 分钟）
-pip install mamba-ssm[causal-conv1d]
+# 安装 mamba-ssm + causal-conv1d（需要 Linux + CUDA，耗时 2-5 分钟）
+uv pip install causal-conv1d mamba-ssm
 
 # 安装其余依赖
-pip install -r requirements.txt
+uv pip install -r requirements.txt
+```
+
+> ⚠️ 注意：`mamba-ssm` 安装时会编译 CUDA 代码，需要服务器有 CUDA 工具链（`nvcc`）。如果安装失败，先确认 `nvcc --version` 可用，或联系服务器管理员安装 `cuda-toolkit`。
+
+**验证安装**：
+```bash
+python -c "import torch; print('PyTorch', torch.__version__)"
+python -c "from mamba_ssm import Mamba; print('mamba-ssm OK')"
+python -c "from qcc.feature_map import EntanglingFeatureMap; print('QCC modules OK')"
 ```
 
 **验证安装**：
@@ -201,7 +205,7 @@ Day 3 → E4 消融 + 结论
 
 | 问题 | 解决 |
 |------|------|
-| `ImportError: No module named mamba_ssm` | `pip install mamba-ssm[causal-conv1d]`，需要 Linux+CUDA |
+| `ImportError: No module named mamba_ssm` | `uv pip install causal-conv1d mamba-ssm`，需要 Linux+CUDA |
 | `CUDA out of memory` | E3 L=8760 时 `batch_size` 降到 8，或用梯度累积 |
 | `FileNotFoundError: electricity.csv` | 先跑 `python deploy/download_datasets.py` |
 | `test_qcc_basic 卡在 SMambaBackbone` | 本地无 mamba-ssm，这是正常的；服务器上跑 |
