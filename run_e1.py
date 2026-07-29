@@ -71,6 +71,7 @@ def build_model(cfg: dict, method_cfg: dict, device: torch.device, seed: int = 0
             d_token=mcfg["d_token"],
             use_qcc=False,
             bond_dim=method_cfg.get("bond_dim", 8),
+            kernel_type=method_cfg.get("kernel_type", "rbf"),
             alpha0=cfg["training"]["alpha0"],
             beta=cfg["training"]["beta"],
             use_periodic_feat=mcfg.get("use_periodic_feat", True),

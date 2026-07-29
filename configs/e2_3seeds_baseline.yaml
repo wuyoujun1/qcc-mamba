@@ -1,0 +1,36 @@
+# E2 基线 3-seed 重跑（H=192, H=336, H=720）
+# 与 e2_3seeds_qcc.yaml 配对，保证同种子同一对比基准
+experiment: e2_3seeds_baseline
+dataset: electricity
+batch_size: 32
+num_workers: 0
+
+split:
+  train_ratio: 0.7
+  test_ratio: 0.2
+
+model:
+  num_var: 321
+  d_token: 128
+  use_periodic_feat: true
+  revin_affine: true
+
+training:
+  epochs: 100
+  patience: 10
+  lr: 0.0001
+  weight_decay: 0.0001
+  beta: 0.1
+  alpha0: 0.1
+  seed_base: 2026
+  n_seeds: 3
+
+method:
+  use_qcc: true
+  use_fmap: false
+  kernel: none
+
+settings:
+  - [192, 192]
+  - [336, 336]
+  - [720, 720]

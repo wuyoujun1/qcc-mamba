@@ -77,6 +77,7 @@ def build_model(cfg: dict, device: torch.device, seed: int = 0) -> QCCMamba:
             d_token=mcfg["d_token"],
             use_qcc=False,
             bond_dim=method_cfg.get("bond_dim", 8),
+            kernel_type=method_cfg.get("kernel_type", "rbf"),
             alpha0=tcfg["alpha0"],
             beta=tcfg["beta"],
             use_periodic_feat=mcfg.get("use_periodic_feat", True),

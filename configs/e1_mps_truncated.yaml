@@ -1,0 +1,46 @@
+# E1 MPS(bond_dim=2) 截断对照
+# NEXT_STEPS.md P0#3：验证压缩 MPS 是否真弱于 QCC
+experiment: e1_mps_truncated
+dataset: electricity
+lookback: 720
+horizon: 96
+batch_size: 32
+num_workers: 0
+
+split:
+  train_ratio: 0.7
+  test_ratio: 0.2
+
+model:
+  num_var: 321
+  d_token: 128
+  use_periodic_feat: true
+  revin_affine: true
+
+training:
+  epochs: 100
+  patience: 10
+  lr: 0.0001
+  weight_decay: 0.0001
+  beta: 0.1
+  alpha0: 0.1
+  seed_base: 2026
+  n_seeds: 3
+
+methods:
+  mps_bd2:
+    use_qcc: false
+    bond_dim: 2
+    kernel_type: rbf
+  mps_bd4:
+    use_qcc: false
+    bond_dim: 4
+    kernel_type: rbf
+  quantum:
+    use_qcc: true
+    use_fmap: true
+    n_qubits: 8
+    n_layers: 2
+    entangle_topo: linear
+    encode_gate: R_Y
+    kernel: quantum

@@ -1,0 +1,37 @@
+# E2 traffic QCC L=336
+experiment: e2_traffic_qcc
+dataset: traffic
+batch_size: 16
+num_workers: 0
+
+split:
+  train_ratio: 0.7
+  test_ratio: 0.2
+
+model:
+  num_var: 862
+  d_token: 128
+  use_periodic_feat: true
+  revin_affine: true
+
+training:
+  epochs: 100
+  patience: 10
+  lr: 0.0001
+  weight_decay: 0.0001
+  beta: 0.1
+  alpha0: 0.1
+  seed_base: 2026
+  n_seeds: 1
+
+method:
+  use_qcc: true
+  use_fmap: true
+  n_qubits: 8
+  n_layers: 2
+  entangle_topo: linear
+  encode_gate: R_Y
+  kernel: quantum
+
+settings:
+  - [336, 336]

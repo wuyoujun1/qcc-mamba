@@ -64,6 +64,7 @@ class QCCMamba(nn.Module):
         use_periodic_feat: bool = True,
         revin_affine: bool = True,
         bond_dim: int = 8,
+        kernel_type: str = "rbf",
     ):
         super().__init__()
         self.num_var = num_var
@@ -73,6 +74,7 @@ class QCCMamba(nn.Module):
         self.use_qcc = use_qcc
         self.beta = beta
         self.use_periodic_feat = use_periodic_feat
+        self.kernel_type = kernel_type
 
         # RevIN：实例归一化
         self.revin = RevIN(num_features=num_var, affine=revin_affine)
@@ -118,6 +120,7 @@ class QCCMamba(nn.Module):
                 bond_dim=bond_dim,
                 alpha0=alpha0,
                 pre_norm=True,
+                kernel_type=kernel_type,
             )
 
     def _prepare_input(self, x: torch.Tensor, x_mark: Optional[torch.Tensor] = None) -> torch.Tensor:
