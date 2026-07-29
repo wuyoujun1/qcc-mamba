@@ -201,6 +201,12 @@ def fit(
         history["val_mae_norm"].append(val_metrics.get("mae_norm", float("inf")))
         history["test_mae_norm"].append(test_metrics.get("mae_norm", float("inf")))
 
+        # 记录旁路权重 α（QCCBlock 有 alpha 参数）
+        alpha_val = None
+        if hasattr(model, 'qcc') and hasattr(model.qcc, 'alpha'):
+            alpha_val = model.qcc.alpha.item()
+        history.setdefault("alpha", []).append(alpha_val)
+
         if scheduler is not None:
             scheduler.step()
 
@@ -211,6 +217,8 @@ def fit(
             extra += f"  MSE_norm={mn:.6f}"
         if man is not None:
             extra += f"  MAE_norm={man:.6f}"
+        if alpha_val is not None:
+            extra += f"  α={alpha_val:.4f}"
         print(
             f"Epoch {epoch + 1}/{epochs}  "
             f"train_loss={train_metrics['loss']:.6f}  "
