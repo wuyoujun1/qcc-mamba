@@ -130,7 +130,7 @@ def main():
     if args.methods:
         methods = {k: v for k, v in methods.items() if k in args.methods}
 
-    seeds = [cfg["training"]["seed_base"] + i for i in range(3)]
+    seeds = [cfg["training"]["seed_base"] + i for i in range(cfg["training"].get("n_seeds", 1))]
     results = {name: [] for name in methods}
 
     for method_name, method_cfg in methods.items():

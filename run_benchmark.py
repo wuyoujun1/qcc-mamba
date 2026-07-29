@@ -18,10 +18,10 @@ import pandas as pd
 import torch
 import yaml
 
-from data.dataloader import build_e1_loaders
+from data.dataloader import build_e1_loaders, DATASET_FILES
 from data.dataset import SplitConfig
 from engine.evaluate import metric_table
-from engine.train import fit
+from engine.train import fit, set_global_stats, compute_global_stats
 from model.qcc_mamba import QCCMamba
 from qcc import make_kernel
 
@@ -112,6 +112,13 @@ def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int, device
         optimizer, T_max=cfg["training"]["epochs"]
     )
 
+    experiment = cfg.get("experiment", "benchmark")
+    method_cfg = cfg.get("method", {})
+    if method_cfg.get("use_qcc", True):
+        method_tag = method_cfg.get("kernel", "qcc")
+    else:
+        method_tag = "mps"
+    run_name = f"{experiment}_{cfg['dataset']}_L{lookback}H{horizon}_{method_tag}_s{seed}"
     history = fit(
         model,
         loaders,
@@ -120,8 +127,11 @@ def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int, device
         epochs=cfg["training"]["epochs"],
         patience=cfg["training"]["patience"],
         device=device,
+        save_dir="checkpoints",
+        run_name=run_name,
     )
-    return history["test_mse"][-1], history["test_mae"][-1]
+    mse_norm = history.get("test_mse_norm", [None])[-1]
+    return history["test_mse"][-1], history["test_mae"][-1], mse_norm
 
 
 def main():
@@ -144,24 +154,55 @@ def main():
     print(f"Dataset: {cfg['dataset']}, Method: {cfg['method']}")
     print(f"{'='*60}")
 
+    # 计算全局每变量标准化统计量（论文标准做法）
+    ds_name = cfg["dataset"].lower()
+    fname = DATASET_FILES.get(ds_name, f"{ds_name}.csv")
+    data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ts_quantum", "datasets")
+    csv_path = os.path.join(data_dir, fname)
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        raw = df.iloc[:, 1:].values.astype(np.float32)
+        split_cfg_raw = cfg.get("split", SplitConfig())
+        n_train = int(len(raw) * split_cfg_raw.get("train_ratio", 0.7))
+        train_raw = raw[:n_train]
+        gm, gs = compute_global_stats(train_raw)
+        set_global_stats(gm, gs)
+        print(f"全局标准化统计量: {train_raw.shape[0]} 个训练样本, "
+              f"{train_raw.shape[1]} 变量, 平均std={train_raw.std(axis=0).mean():.2f}")
+    else:
+        print(f"⚠️ 未找到数据集 {csv_path}，不计算归一化 MSE")
+
     seeds = [cfg["training"]["seed_base"] + i for i in range(cfg["training"].get("n_seeds", 3))]
     rows = []
     for lookback, horizon in cfg["settings"]:
         print(f"\n>>> Setting: L={lookback}, H={horizon}")
-        mse_list, mae_list = [], []
+        mse_list, mae_list, mn_list = [], [], []
         for seed in seeds:
-            mse, mae = run_single_setting(cfg, lookback, horizon, seed, device)
+            out = run_single_setting(cfg, lookback, horizon, seed, device)
+            if len(out) == 3:
+                mse, mae, mse_norm = out
+            else:
+                mse, mae = out
+                mse_norm = None
             mse_list.append(mse)
             mae_list.append(mae)
-            print(f"  seed {seed}: MSE={mse:.6f}, MAE={mae:.6f}")
-        rows.append({
+            mn_list.append(mse_norm)
+            msg = f"  seed {seed}: MSE={mse:.6f}, MAE={mae:.6f}"
+            if mse_norm is not None:
+                msg += f", MSE_norm={mse_norm:.6f}"
+            print(msg)
+        r = {
             "lookback": lookback,
             "horizon": horizon,
             "mse_mean": float(np.mean(mse_list)),
             "mse_std": float(np.std(mse_list)),
             "mae_mean": float(np.mean(mae_list)),
             "mae_std": float(np.std(mae_list)),
-        })
+        }
+        valid_mn = [x for x in mn_list if x is not None]
+        if valid_mn:
+            r["mse_norm"] = float(np.mean(valid_mn))
+        rows.append(r)
 
     df = pd.DataFrame(rows)
     out_path = os.path.join(args.out, f"{experiment_name}_{cfg['dataset']}.csv")

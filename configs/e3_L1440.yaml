@@ -1,22 +1,19 @@
-# E3 超长序列主战场：验证量子核在长输入 / 大变量场景下的优势
 experiment: e3_longterm
 dataset: electricity
-batch_size: 16      # L=8760 时显存压力大，建议 8-16
+batch_size: 64
 num_workers: 0
 
-# 数据划分
+# 52/9/39 三分：验证集有 208 个窗口，足够早停
 split:
-  train_ratio: 0.7
-  test_ratio: 0.2
+  train_ratio: 0.52
+  test_ratio: 0.39
 
-# 模型通用配置
 model:
   num_var: 321
   d_token: 128
   use_periodic_feat: true
   revin_affine: true
 
-# 训练配置
 training:
   epochs: 100
   patience: 10
@@ -27,7 +24,6 @@ training:
   seed_base: 2026
   n_seeds: 1
 
-# 方法：只跑量子核
 method:
   use_qcc: true
   use_fmap: true
@@ -37,8 +33,5 @@ method:
   encode_gate: R_Y
   kernel: quantum
 
-# 超长序列设置 (L, H)
 settings:
   - [1440, 720]
-  - [8760, 720]
-  - [17520, 720]

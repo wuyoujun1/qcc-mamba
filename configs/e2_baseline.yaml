@@ -1,22 +1,19 @@
-# E2 标准 benchmark：验证 QCC-Mamba 在常规长度下不损害 S-Mamba 能力
-experiment: e2_standard
+# E2 S-Mamba 基线：无 QCC 旁路，纯 backbone
+experiment: e2_baseline
 dataset: electricity
 batch_size: 32
 num_workers: 0
 
-# 数据划分
 split:
   train_ratio: 0.7
   test_ratio: 0.2
 
-# 模型通用配置
 model:
   num_var: 321
   d_token: 128
   use_periodic_feat: true
   revin_affine: true
 
-# 训练配置
 training:
   epochs: 100
   patience: 10
@@ -27,17 +24,12 @@ training:
   seed_base: 2026
   n_seeds: 1
 
-# 方法：只跑量子核（与 run_e1.py 中 quantum 组一致）
+# none 核 = 无旁路 ≈ S-Mamba
 method:
   use_qcc: true
-  use_fmap: true
-  n_qubits: 8
-  n_layers: 2
-  entangle_topo: linear
-  encode_gate: R_Y
-  kernel: quantum
+  use_fmap: false
+  kernel: none
 
-# 标准 benchmark 设置 (L, H)
 settings:
   - [96, 96]
   - [192, 192]

@@ -81,6 +81,7 @@ class EntanglingFeatureMap(nn.Module):
         self.N = n_qubits
         self.D = n_layers
         self.d = d_token
+        self.d_token = d_token  # 兼容旧代码引用
         self.entangle_topo = entangle_topo
         self.encode_gate = encode_gate
         self.dim = 1 << n_qubits  # 2^N
@@ -162,7 +163,10 @@ class EntanglingFeatureMap(nn.Module):
         # 第 qubit 个轴在 unflatten 之后位于第 -(N - qubit) 维
         target_dim = -(self.N - qubit)
         psi = torch.movedim(psi, target_dim, -1)  # (B, V, 2, ..., 2 [target last])
-        # gate: (B, V, 2, 2) -> 在最后两维做 matmul
+        # gate: (B, V, 2, 2) -> reshape to (B, V, 1, ..., 1, 2, 2) 以匹配 psi 的 batch 维度
+        n_extra = psi.dim() - gate.dim()  # N - 2 个额外 batch 维度
+        if n_extra > 0:
+            gate = gate.view(gate.shape[0], gate.shape[1], *([1] * n_extra), 2, 2)
         psi = torch.matmul(psi, gate)  # gate 右乘
         # 移回
         psi = torch.movedim(psi, -1, target_dim)

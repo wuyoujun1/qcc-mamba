@@ -106,7 +106,7 @@ class SMambaBackbone(BaseBackbone):
         enc_out = self.enc_embedding(x)  # (B, V_eff, d_model)
 
         # Encoder: (B, V_eff, d_model) → (B, V_eff, d_model)
-        enc_out, _ = self.encoder(enc_out, attn_mask=None)
+        enc_out = self.encoder(enc_out, attn_mask=None)
 
         # 取前 V 个变量 token（去掉时间特征 token）
         H = enc_out[:, :V, :]  # (B, V, d_model)

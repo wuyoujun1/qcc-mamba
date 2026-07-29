@@ -19,6 +19,8 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+from .preprocess import add_time_features
+
 
 @dataclass
 class SplitConfig:
