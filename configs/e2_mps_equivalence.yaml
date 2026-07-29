@@ -1,0 +1,53 @@
+# E2 MPS 等价性验证：QCC vs 修正后的 MPSBypass（bond_dim=4, RBF）
+#
+# 目的：
+#   验证当 MPSBypass 设置为 bond_dim=2^D=4, kernel_type='rbf' 时，
+#   与 QCC(n_qubits=8, n_layers=2) 在数学上等价 (Schollwöck 2011)。
+#   如果两者在 ECL 上表现一致，则证明 QCC 的额外优势主要来自
+#   量子 feature map（而非张量网络结构），论文叙事需要相应调整。
+#
+# 使用方法（服务器端）：
+#   git pull
+#   python run_e2.py --config configs/e2_mps_equivalence.yaml
+experiment: e2_mps_equivalence
+dataset: electricity
+batch_size: 32
+num_workers: 0
+
+# 数据划分（与 e2_standard 一致）
+split:
+  train_ratio: 0.7
+  test_ratio: 0.2
+
+# 模型通用配置
+model:
+  num_var: 321
+  d_token: 128
+  use_periodic_feat: true
+  revin_affine: true
+
+# 训练配置（与 e2_standard 一致）
+training:
+  epochs: 100
+  patience: 10
+  lr: 1e-4
+  weight_decay: 1e-4
+  beta: 0.1
+  alpha0: 0.1
+  seed_base: 2026
+  n_seeds: 3
+
+# 方法：使用修正后的 MPSBypass
+# bond_dim=4 等价于 QCC 的 n_layers=2 (2^D = 4)
+# kernel_type=rbf 非线性特性与量子核对齐
+method:
+  use_qcc: false
+  bond_dim: 4
+  kernel_type: rbf
+
+# 与 e2_standard 一致的 L,H 设置
+settings:
+  - [96, 96]
+  - [192, 192]
+  - [336, 336]
+  - [720, 720]

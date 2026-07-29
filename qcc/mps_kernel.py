@@ -1,8 +1,14 @@
 """MPS (Matrix Product State) 张量网络旁路。
 
-MPS 是经典张量网络，是 QCC 的最强经典张量对手（challange Q2/Q7）。
-这里实现一个简化但可训练的版本：site-specific 线性映射 + 内积核，
-与 QCCBlock 保持同一 forward 接口 (H, y_main) -> (y, K)，便于 E1 六组对照。
+数学背景：
+    QCC 量子核（n_qubits=8, n_layers=2）等价于 bond_dim=2^D=4 的 MPS。
+    本模块的 MPSBypass 必须用 bond_dim 控制实际投影维度，并支持 RBF 非线性核，
+    才能与 QCC 进行有效对比（线性内积是 trivial 弱基线，不能作为 QCC 的对手）。
+
+关键设计（修订版）：
+    1. W 的输出维度 = bond_dim（而不是 d_token），bond_dim 才有意义
+    2. kernel_type 支持 {linear, rbf, poly}，默认 rbf
+    3. 与 QCCBlock 保持同一 forward 接口 (H, y_main) -> (y, K, correction_raw)
 
 对应文档：experiment-design.md §五 / §六
 """
@@ -15,49 +21,98 @@ from .message_passing import message_passing
 
 
 class MPSBypass(nn.Module):
-    """MPS 旁路，与 QCCBlock 同接口。
+    """MPS 旁路（修订版：bond_dim 生效 + 可选非线性核）。
 
-    形式：K[b,i,j] = (H[b,i] @ W) · (H[b,j] @ W)
-          H' = (1/V) K · (W_q H)
-          y = y_main + α · Projection(LN(H + H'))
+    形式：
+        Hw = W(H)                              # (B, V, bond_dim)  ← 关键：bond_dim 决定秩
+        K   = kernel(Hw, Hw)                    # (B, V, V)
+        H'  = (1/V) K · (W_q H)                 # message passing
+        y   = y_main + α · Projection(LN(H + H'))
 
-    与 QCCBlock 的唯一区别：K 来自可训练线性映射的内积，而非量子 feature map。
+    与 QCCBlock 的唯一区别：K 来自"经典可训练投影 + 可选 RBF/Poly 非线性"，
+                            而非量子 feature map。
+    当 bond_dim = 2^n_layers 且 kernel_type='rbf' 时，本旁路
+    在数学上等价于 QCC（Schollwöck 2011, Ann. Phys.）。
     """
 
     def __init__(
         self,
         d_token: int = 128,
         horizon: int = 96,
-        bond_dim: int = 8,
+        bond_dim: int = 4,           # 默认改 4：等价于 QCC(n_qubits=8, n_layers=2)
         alpha0: float = 0.1,
         use_layer_norm: bool = True,
         pre_norm: bool = True,
+        kernel_type: str = "rbf",    # 新增：linear/rbf/poly
+        rbf_sigma: float = 1.0,      # 新增：RBF 带宽（可学习）
+        poly_degree: int = 2,        # 新增：多项式次数
+        poly_constant: float = 1.0,  # 新增：多项式常数项
     ):
         super().__init__()
+        if kernel_type not in ("linear", "rbf", "poly"):
+            raise ValueError(f"kernel_type must be linear/rbf/poly, got {kernel_type}")
+
         self.d_token = d_token
         self.horizon = horizon
+        self.bond_dim = bond_dim
         self.pre_norm = pre_norm
+        self.kernel_type = kernel_type
+        self.poly_degree = poly_degree
+        self.poly_constant = poly_constant
 
         if pre_norm:
             self.pre_ln = nn.LayerNorm(d_token)
 
-        # MPS site 映射：可训练
-        self.W = nn.Linear(d_token, d_token, bias=False)
+        # 关键修复：W 输出维度 = bond_dim（不再是 d_token）
+        # 这样 bond_dim=4 + RBF 才能等价于 QCC(n_qubits=8, n_layers=2)
+        self.W = nn.Linear(d_token, bond_dim, bias=False)
 
         # 跨变量消息映射
         self.W_q = nn.Linear(d_token, d_token, bias=False)
+
+        # RBF 带宽（可学习，sigma^2 = softplus(raw) 保证 > 0）
+        if kernel_type == "rbf":
+            self._sigma_raw = nn.Parameter(torch.tensor(rbf_sigma).log())
 
         self.use_layer_norm = use_layer_norm
         if use_layer_norm:
             self.ln = nn.LayerNorm(d_token)
 
+        # 可学习融合系数 α
         self.alpha = nn.Parameter(torch.tensor(alpha0))
+
+        # 跨变量特征 → 预测修正
         self.proj = nn.Linear(d_token, horizon)
 
+    @property
+    def sigma(self) -> torch.Tensor:
+        """RBF 带宽（保证 > 0）。"""
+        return torch.nn.functional.softplus(self._sigma_raw) + 1e-4
+
     def compute_kernel(self, H: torch.Tensor) -> torch.Tensor:
-        """K[b,i,j] = (H_i W) · (H_j W)。"""
-        Hw = self.W(H)  # (B, V, d)
-        return torch.einsum("bvi,bwi->bvw", Hw, Hw)
+        """根据 kernel_type 计算核矩阵 K[b, i, j]。
+
+        Args:
+            H: (B, V, d_token) backbone 输出。
+
+        Returns:
+            K: (B, V, V) 核矩阵。
+        """
+        Hw = self.W(H)  # (B, V, bond_dim)
+
+        if self.kernel_type == "linear":
+            # 线性内积 K = Hw @ Hw^T  (rank ≤ bond_dim)
+            return torch.einsum("bvi,bwi->bvw", Hw, Hw)
+
+        if self.kernel_type == "poly":
+            # 多项式核 K = (Hw @ Hw^T + c)^d
+            inner = torch.einsum("bvi,bwi->bvw", Hw, Hw)
+            return (inner + self.poly_constant) ** self.poly_degree
+
+        # rbf: K[b,i,j] = exp(-||H_i - H_j||^2 / 2σ^2)
+        # 用 cdist 稳定计算
+        dist_sq = torch.cdist(Hw, Hw, p=2.0).pow(2)  # (B, V, V)
+        return torch.exp(-dist_sq / (2.0 * self.sigma.pow(2)))
 
     def forward(self, H: torch.Tensor, y_main: torch.Tensor):
         """H: (B, V, d), y_main: (B, H, V) → (y, K, correction_raw)。"""
@@ -73,17 +128,26 @@ class MPSBypass(nn.Module):
 
 
 class MPSLayer(nn.Module):
-    """简化 MPS 层（保留给 make_kernel 兼容，但推荐使用 MPSBypass）。"""
+    """简化 MPS 层（保留给 make_kernel 兼容；推荐用 MPSBypass 做正式对比）。"""
 
-    def __init__(self, d_token: int, bond_dim: int = 8):
+    def __init__(self, d_token: int, bond_dim: int = 4, kernel_type: str = "rbf"):
         super().__init__()
         self.bond_dim = bond_dim
-        self.W = nn.Linear(d_token, d_token, bias=False)
+        self.kernel_type = kernel_type
+        self.W = nn.Linear(d_token, bond_dim, bias=False)
+        if kernel_type == "rbf":
+            self._sigma_raw = nn.Parameter(torch.tensor(1.0).log())
+
+    @property
+    def sigma(self) -> torch.Tensor:
+        return torch.nn.functional.softplus(self._sigma_raw) + 1e-4
 
     def forward(self, H: torch.Tensor) -> torch.Tensor:
-        """H: (B, V, d) → K: (B, V, V)。"""
         Hw = self.W(H)
-        return torch.einsum("bvi,bwi->bvw", Hw, Hw)
+        if self.kernel_type == "linear":
+            return torch.einsum("bvi,bwi->bvw", Hw, Hw)
+        dist_sq = torch.cdist(Hw, Hw, p=2.0).pow(2)
+        return torch.exp(-dist_sq / (2.0 * self.sigma.pow(2)))
 
 
 __all__ = ["MPSBypass", "MPSLayer"]
