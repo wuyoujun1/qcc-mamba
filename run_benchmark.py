@@ -131,7 +131,8 @@ def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int, device
         run_name=run_name,
     )
     mse_norm = history.get("test_mse_norm", [None])[-1]
-    return history["test_mse"][-1], history["test_mae"][-1], mse_norm
+    mae_norm = history.get("test_mae_norm", [None])[-1]
+    return history["test_mse"][-1], history["test_mae"][-1], mse_norm, mae_norm
 
 
 def main():
@@ -176,20 +177,23 @@ def main():
     rows = []
     for lookback, horizon in cfg["settings"]:
         print(f"\n>>> Setting: L={lookback}, H={horizon}")
-        mse_list, mae_list, mn_list = [], [], []
+        mse_list, mae_list, mn_list, man_list = [], [], [], []
         for seed in seeds:
             out = run_single_setting(cfg, lookback, horizon, seed, device)
-            if len(out) == 3:
-                mse, mae, mse_norm = out
+            if len(out) == 4:
+                mse, mae, mse_norm, mae_norm = out
             else:
                 mse, mae = out
-                mse_norm = None
+                mse_norm, mae_norm = None, None
             mse_list.append(mse)
             mae_list.append(mae)
             mn_list.append(mse_norm)
+            man_list.append(mae_norm)
             msg = f"  seed {seed}: MSE={mse:.6f}, MAE={mae:.6f}"
             if mse_norm is not None:
                 msg += f", MSE_norm={mse_norm:.6f}"
+            if mae_norm is not None:
+                msg += f", MAE_norm={mae_norm:.6f}"
             print(msg)
         r = {
             "lookback": lookback,
@@ -200,8 +204,11 @@ def main():
             "mae_std": float(np.std(mae_list)),
         }
         valid_mn = [x for x in mn_list if x is not None]
+        valid_man = [x for x in man_list if x is not None]
         if valid_mn:
             r["mse_norm"] = float(np.mean(valid_mn))
+        if valid_man:
+            r["mae_norm"] = float(np.mean(valid_man))
         rows.append(r)
 
     df = pd.DataFrame(rows)

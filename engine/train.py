@@ -107,6 +107,7 @@ def evaluate(
     mae_sum = 0.0
     n_samples = 0
     mse_norm_sum = 0.0
+    mae_norm_sum = 0.0
     n_norm = 0
 
     # 取全局标准化参数（预计算）
@@ -133,13 +134,14 @@ def evaluate(
         mae_sum += mae.item()
         n_samples += y_true.numel()
 
-        # 论文标准归一化 MSE：用全局每变量 mean/std 标准化
+        # 论文标准归一化 MSE/MAE：用全局每变量 mean/std 标准化
         if global_mean is not None and global_std is not None:
             gs = global_std.to(device).clamp(min=1e-5)
             gm = global_mean.to(device)
             y_pred_norm = (y_pred - gm) / gs
             y_true_norm = (y_true - gm) / gs
             mse_norm_sum += nn.functional.mse_loss(y_pred_norm, y_true_norm, reduction="sum").item()
+            mae_norm_sum += torch.abs(y_pred_norm - y_true_norm).sum().item()
             n_norm += y_true.numel()
 
     if n_samples == 0:
@@ -152,6 +154,7 @@ def evaluate(
     }
     if n_norm > 0:
         result["mse_norm"] = mse_norm_sum / n_norm
+        result["mae_norm"] = mae_norm_sum / n_norm
     return result
 
 
@@ -179,7 +182,8 @@ def fit(
     wait = 0
     history = {"train_loss": [], "val_mse": [], "test_mse": [],
                "val_mae": [], "test_mae": [],
-               "val_mse_norm": [], "test_mse_norm": []}
+               "val_mse_norm": [], "test_mse_norm": [],
+               "val_mae_norm": [], "test_mae_norm": []}
     best_state = None
 
     for epoch in range(epochs):
@@ -194,19 +198,24 @@ def fit(
         history["test_mae"].append(test_metrics["mae"])
         history["val_mse_norm"].append(val_metrics.get("mse_norm", float("inf")))
         history["test_mse_norm"].append(test_metrics.get("mse_norm", float("inf")))
+        history["val_mae_norm"].append(val_metrics.get("mae_norm", float("inf")))
+        history["test_mae_norm"].append(test_metrics.get("mae_norm", float("inf")))
 
         if scheduler is not None:
             scheduler.step()
 
-        mse_n_str = ""
         mn = test_metrics.get("mse_norm")
+        man = test_metrics.get("mae_norm")
+        extra = ""
         if mn is not None:
-            mse_n_str = f"  MSE_norm={mn:.6f}"
+            extra += f"  MSE_norm={mn:.6f}"
+        if man is not None:
+            extra += f"  MAE_norm={man:.6f}"
         print(
             f"Epoch {epoch + 1}/{epochs}  "
             f"train_loss={train_metrics['loss']:.6f}  "
             f"val_mse={val_metrics['mse']:.6f}  "
-            f"test_mse={test_metrics['mse']:.6f}{mse_n_str}"
+            f"test_mse={test_metrics['mse']:.6f}{extra}"
         )
 
         # 验证集早停 + 保存最佳 checkpoint

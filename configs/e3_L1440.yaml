@@ -3,10 +3,10 @@ dataset: electricity
 batch_size: 64
 num_workers: 0
 
-# 52/9/39 三分：验证集有 208 个窗口，足够早停
+# 7:1:2 标准划分，与 E2 保持一致
 split:
-  train_ratio: 0.52
-  test_ratio: 0.39
+  train_ratio: 0.7
+  test_ratio: 0.2
 
 model:
   num_var: 321
