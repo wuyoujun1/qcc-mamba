@@ -1,6 +1,6 @@
-# E2 QCC 3-seed 重跑（H=192, H=336, H=720）
-# NEXT_STEPS.md P0#1 + #2：验证输赢是否稳健
-experiment: e2_3seeds_qcc
+# E2 QCC 3-seed 重跑（新版 feature map: use_full_bloch=True）
+# 验证 1-seed 结果的稳健性
+experiment: e2_3seeds_qcc_v2
 dataset: electricity
 batch_size: 32
 num_workers: 4
@@ -33,8 +33,10 @@ method:
   entangle_topo: linear
   encode_gate: R_Y
   kernel: quantum
+  use_full_bloch: true
 
 settings:
+  - [96, 96]
   - [192, 192]
   - [336, 336]
   - [720, 720]

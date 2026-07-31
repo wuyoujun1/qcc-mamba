@@ -1,6 +1,6 @@
-# E2 基线 3-seed 重跑（H=192, H=336, H=720）
-# 与 e2_3seeds_qcc.yaml 配对，保证同种子同一对比基准
-experiment: e2_3seeds_baseline
+# E2 基线 3-seed 重跑（全部 4 lookback）
+# 与 e2_3seeds_qcc_v2.yaml 配对，保证同种子同一对比基准
+experiment: e2_3seeds_baseline_v2
 dataset: electricity
 batch_size: 32
 num_workers: 4
@@ -31,6 +31,7 @@ method:
   kernel: none
 
 settings:
+  - [96, 96]
   - [192, 192]
   - [336, 336]
   - [720, 720]
