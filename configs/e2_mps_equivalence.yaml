@@ -12,7 +12,7 @@
 experiment: e2_mps_equivalence
 dataset: electricity
 batch_size: 32
-num_workers: 0
+num_workers: 4
 
 # 数据划分（与 e2_standard 一致）
 split:

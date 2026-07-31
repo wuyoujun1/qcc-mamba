@@ -61,6 +61,7 @@ def build_model(cfg: dict, device: torch.device, seed: int = 0) -> QCCMamba:
             n_layers=method_cfg.get("n_layers", 2),
             entangle_topo=method_cfg.get("entangle_topo", "linear"),
             encode_gate=method_cfg.get("encode_gate", "R_Y"),
+            use_full_bloch=method_cfg.get("use_full_bloch", True),
             kernel_fn=kernel_fn,
             use_fmap=method_cfg.get("use_fmap", True),
             alpha0=tcfg["alpha0"],
@@ -87,12 +88,32 @@ def build_model(cfg: dict, device: torch.device, seed: int = 0) -> QCCMamba:
     return model.to(device)
 
 
-def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int, device: torch.device):
+def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int,
+                       device: torch.device, resume: bool = False):
     """跑一个 (lookback, horizon, seed) 设置。"""
     set_seed(seed)
     cfg = dict(cfg)
     cfg["lookback"] = lookback
     cfg["horizon"] = horizon
+
+    experiment = cfg.get("experiment", "benchmark")
+    method_cfg = cfg.get("method", {})
+    if method_cfg.get("use_qcc", True):
+        method_tag = method_cfg.get("kernel", "qcc")
+    else:
+        method_tag = "mps"
+    run_name = f"{experiment}_{cfg['dataset']}_L{lookback}H{horizon}_{method_tag}_s{seed}"
+
+    # 断点续训：加载 checkpoint
+    initial_epoch = 0
+    if resume:
+        ckpt_path = os.path.join("checkpoints", f"{run_name}_best.pt")
+        if os.path.exists(ckpt_path):
+            ckpt = torch.load(ckpt_path, map_location=device)
+            print(f"  🔄 恢复自 checkpoint: {ckpt_path} (epoch {ckpt['epoch']})")
+        else:
+            print(f"  ⚠️ 未找到 checkpoint {ckpt_path}，从头训练")
+            resume = False
 
     loaders = build_e1_loaders(
         dataset_name=cfg["dataset"],
@@ -104,6 +125,10 @@ def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int, device
     )
     model = build_model(cfg, device, seed=seed)
 
+    if resume:
+        model.load_state_dict(ckpt["model_state_dict"])
+        initial_epoch = ckpt["epoch"]
+
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=cfg["training"]["lr"],
@@ -113,13 +138,11 @@ def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int, device
         optimizer, T_max=cfg["training"]["epochs"]
     )
 
-    experiment = cfg.get("experiment", "benchmark")
-    method_cfg = cfg.get("method", {})
-    if method_cfg.get("use_qcc", True):
-        method_tag = method_cfg.get("kernel", "qcc")
-    else:
-        method_tag = "mps"
-    run_name = f"{experiment}_{cfg['dataset']}_L{lookback}H{horizon}_{method_tag}_s{seed}"
+    if resume and "optimizer_state_dict" in ckpt:
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+    if resume and "scheduler_state_dict" in ckpt and ckpt["scheduler_state_dict"]:
+        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+
     history = fit(
         model,
         loaders,
@@ -130,6 +153,7 @@ def run_single_setting(cfg: dict, lookback: int, horizon: int, seed: int, device
         device=device,
         save_dir="checkpoints",
         run_name=run_name,
+        initial_epoch=initial_epoch,
     )
     mse_norm = history.get("test_mse_norm", [None])[-1]
     mae_norm = history.get("test_mae_norm", [None])[-1]
@@ -141,6 +165,8 @@ def main():
     parser.add_argument("--config", required=True, help="benchmark 配置文件")
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--out", default="results", help="结果输出目录")
+    parser.add_argument("--resume", action="store_true", help="从已有 checkpoint 断点续训")
+    parser.add_argument("--num-workers", type=int, default=None, help="覆盖 config 中的 num_workers")
     args = parser.parse_args()
 
     with open(args.config, "r", encoding="utf-8") as f:
@@ -148,6 +174,11 @@ def main():
 
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
+
+    # CLI 覆盖 config 中的 num_workers
+    if args.num_workers is not None:
+        cfg["num_workers"] = args.num_workers
+        print(f"[CLI] num_workers 覆盖为: {args.num_workers}")
 
     os.makedirs(args.out, exist_ok=True)
     experiment_name = cfg.get("experiment", "benchmark")
@@ -180,7 +211,7 @@ def main():
         print(f"\n>>> Setting: L={lookback}, H={horizon}")
         mse_list, mae_list, mn_list, man_list = [], [], [], []
         for seed in seeds:
-            out = run_single_setting(cfg, lookback, horizon, seed, device)
+            out = run_single_setting(cfg, lookback, horizon, seed, device, resume=args.resume)
             if len(out) == 4:
                 mse, mae, mse_norm, mae_norm = out
             else:

@@ -2,7 +2,7 @@
 experiment: e2_baseline
 dataset: electricity
 batch_size: 64
-num_workers: 0
+num_workers: 4
 
 split:
   train_ratio: 0.7

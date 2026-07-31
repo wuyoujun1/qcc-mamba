@@ -2,7 +2,7 @@
 experiment: e3_longterm
 dataset: electricity
 batch_size: 16
-num_workers: 0
+num_workers: 4
 
 # 60/0/40 二分：训练数据量大，测试集足够长
 split:

@@ -1,0 +1,6 @@
+# E2 MPS sweep (H=720, 1 seed each)
+configs/e2_mps_sweep_bd2.yaml
+configs/e2_mps_sweep_bd4.yaml
+configs/e2_mps_sweep_bd8.yaml
+configs/e2_mps_sweep_bd16.yaml
+configs/e2_mps_sweep_bd32.yaml

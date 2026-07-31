@@ -1,8 +1,8 @@
-# E2 标准 benchmark：验证 QCC-Mamba 在常规长度下不损害 S-Mamba 能力
-experiment: e2_standard
+# E2 标准 benchmark：新版 feature map（use_full_bloch=True）
+experiment: e2_standard_v2
 dataset: electricity
 batch_size: 32
-num_workers: 0
+num_workers: 4
 
 # 数据划分
 split:
@@ -36,6 +36,7 @@ method:
   entangle_topo: linear
   encode_gate: R_Y
   kernel: quantum
+  use_full_bloch: true
 
 # 标准 benchmark 设置 (L, H)
 settings:

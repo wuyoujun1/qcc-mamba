@@ -1,8 +1,9 @@
-# E2 MPS bond_dim 扫描：bd=4
-experiment: e2_mps_sweep_bd4
+# E2 MPS bond_dim=4：纠缠能力等价于 QCC(n_qubits=8, n_layers=2)
+# 用于论文 Table 1 的理论等价对照
+experiment: e2_mps_bd4
 dataset: electricity
-batch_size: 32
-num_workers: 0
+batch_size: 64
+num_workers: 4
 
 split:
   train_ratio: 0.7
@@ -20,7 +21,7 @@ training:
   lr: 0.0001
   weight_decay: 0.0001
   beta: 0.1
-  alpha0: 0.1
+  alpha0: 0.3          # 旁路初始权重，C3 建议 0.3-0.5
   seed_base: 2026
   n_seeds: 1
 
@@ -30,4 +31,7 @@ method:
   kernel_type: rbf
 
 settings:
+  - [96, 96]
+  - [192, 192]
+  - [336, 336]
   - [720, 720]

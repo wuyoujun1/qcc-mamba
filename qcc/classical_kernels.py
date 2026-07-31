@@ -87,6 +87,8 @@ def rff_kernel(
     B, V, d = H.shape
     key = cache_key or f"rff_{d}_{D_rff}_{gamma}_seed{seed}"
     if key not in _RFF_CACHE or _RFF_CACHE[key].W.device != H.device:
+        if key in _RFF_CACHE:
+            del _RFF_CACHE[key]  # 主动清理旧缓存，防止跨 device 隐式迁移
         _RFF_CACHE[key] = RFFCache(d, D_rff, gamma, H.device, seed=seed)
     W = _RFF_CACHE[key].W
     b = _RFF_CACHE[key].b

@@ -1,7 +1,7 @@
 experiment: e3_longterm
 dataset: electricity
 batch_size: 16
-num_workers: 0
+num_workers: 4
 
 # 60/0/40 二分：无验证集，所以限制 epoch=50 避免无限训练
 split:

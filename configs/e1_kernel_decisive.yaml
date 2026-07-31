@@ -6,7 +6,7 @@ dataset: electricity
 lookback: 720
 horizon: 96
 batch_size: 32
-num_workers: 0
+num_workers: 4
 
 # 数据划分
 split:

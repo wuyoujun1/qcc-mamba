@@ -1,7 +1,7 @@
 experiment: e3_baseline
 dataset: electricity
 batch_size: 64
-num_workers: 0
+num_workers: 4
 
 # 7:1:2 标准划分，与 E2 一致
 split:

@@ -136,10 +136,11 @@ class ECLDataset(Dataset):
         split: str = "train",
         split_cfg: Optional[SplitConfig] = None,
         stride: int = 1,
+        freq: str = "h",
     ):
         df = _load_csv_dataframe(csv_path)
         data = df.values.astype(np.float32)  # (T, V)
-        time_feats = add_time_features(df.index, freq="h")  # (T, 2)
+        time_feats = add_time_features(df.index, freq=freq)  # (T, F)
         self.time_index = df.index
         n_train, n_val, n_test = (split_cfg or SplitConfig()).split_lengths(len(data))
         if split == "train":

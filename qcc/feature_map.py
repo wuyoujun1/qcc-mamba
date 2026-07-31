@@ -1,15 +1,20 @@
 """纠缠数据编码 feature map（QKCS 经典模拟，无训练量子参数）。
 
-数学定义（无变分层，固定电路）：
-    |φ(h)⟩ = V(h) |0⟩^⊗N
-    V(h) = Π_{l=1..D} [ U_ent · ( ⊗_{i=1..N} R_Y(π · h[i mod d]) ) ]
-    U_ent = Π_{i=1..N-1} CNOT_{i,i+1}        # linear 拓扑
+改进：
+    1. 可学习降维 Linear(d_token → N × angles_per_qubit)，消除信息瓶颈
+    2. use_full_bloch=True 时 RZ·RY 覆盖完整 Bloch 球
+
+数学定义（use_full_bloch=False）：
+    |φ(h)⟩ = Π_{l=1..D} [ U_ent · ( ⊗_{i=1..N} R_Y(π · θ_i) ) ] |0⟩^⊗N
+
+数学定义（use_full_bloch=True）：
+    |φ(h)⟩ = Π_{l=1..D} [ U_ent · ( ⊗_{i=1..N} R_Z(π·φ_i) R_Y(π·θ_i) ) ] |0⟩^⊗N
 
 QKCS 实现要点：
 - 态矢量 ψ ∈ C^{B×V×2^N}，N=8 时仅 256 维复向量，BLAS/GPU 友好
-- **第一层旋转**：因初态是 |0⟩^N 乘积态，可直接用外积构造 ⊗_i [cos(θ_i/2), sin(θ_i/2)]
-- **后续层旋转**：态已纠缠，必须对每个 qubit 轴逐比特施加 R_Y（movedim + batched matmul）
-- **CNOT 纠缠层**：预计算 2^N 维置换索引，一次 index_select 完成整个 U_ent
+- **第一层旋转**：乘积态优化，直接构造 ⊗_i |ψ_i⟩
+- **后续层旋转**：态已纠缠，逐比特 movedim + matmul
+- **CNOT 纠缠层**：预计算 2^N 维置换索引，一次 index_select 完成
 
 对应文档：experiment-design.md §4.2 / §4.7
 """
@@ -55,6 +60,7 @@ class EntanglingFeatureMap(nn.Module):
             - "ring":   Π_{i=0}^{N-1} CNOT_{i,(i+1)%N}
             - "none":   恒等（用于消融"无纠缠"对照）
         encode_gate: 数据编码旋转门，仅 "R_Y" / "R_X" / "R_Z" 生效。
+        use_full_bloch: True 时每 qubit 用 RZ·RY 两角度编码完整 Bloch 球。
     """
 
     SUPPORTED_TOPO = ("linear", "ring", "none")
@@ -67,6 +73,7 @@ class EntanglingFeatureMap(nn.Module):
         d_token: int = 128,
         entangle_topo: str = "linear",
         encode_gate: str = "R_Y",
+        use_full_bloch: bool = True,  # NEW
     ):
         super().__init__()
         if entangle_topo not in self.SUPPORTED_TOPO:
@@ -75,21 +82,24 @@ class EntanglingFeatureMap(nn.Module):
             raise ValueError(f"encode_gate must be one of {self.SUPPORTED_GATE}")
         if n_qubits < 2 or n_qubits > 14:
             raise ValueError(f"n_qubits must be in [2, 14] for QKCS memory, got {n_qubits}")
-        if d_token < n_qubits:
-            raise ValueError(f"d_token ({d_token}) must be >= n_qubits ({n_qubits})")
 
         self.N = n_qubits
         self.D = n_layers
         self.d = d_token
-        self.d_token = d_token  # 兼容旧代码引用
+        self.d_token = d_token
         self.entangle_topo = entangle_topo
         self.encode_gate = encode_gate
-        self.dim = 1 << n_qubits  # 2^N
+        self.dim = 1 << n_qubits
+        self.use_full_bloch = use_full_bloch
+        self.angles_per_qubit = 2 if use_full_bloch else 1
+        self.required_dim = n_qubits * self.angles_per_qubit
 
         # 预计算整个纠缠层 U_ent 的总置换索引
         perm = self._build_entangle_perm(entangle_topo)
-        # 显式 long 化，避免 buffer 类型推导为 int
         self.register_buffer("ent_perm", perm.long(), persistent=False)
+
+        # NEW: 可学习输入投影（替换原"硬切前 N 维"）
+        self.input_proj = nn.Linear(d_token, self.required_dim, bias=True)
 
     # ------------------------------------------------------------------ #
     # 纠缠拓扑：把 U_ent 表达为 2^N 维置换索引
@@ -172,39 +182,81 @@ class EntanglingFeatureMap(nn.Module):
         psi = torch.movedim(psi, -1, target_dim)
         return psi.flatten(-self.N)  # (B, V, 2^N)
 
-    def _apply_rot_layer(self, psi: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-        """对每个 qubit i 施加 R_*(π·h[i])。psi: (B,V,2^N) -> (B,V,2^N)。"""
+    # ------------------------------------------------------------------ #
+    # NEW: 复合 RZ·RY 2x2 矩阵（用于后续层纠缠态）
+    # ------------------------------------------------------------------ #
+    def _rz_ry_matrix(self, theta: torch.Tensor, phi: torch.Tensor) -> torch.Tensor:
+        """复合 RZ(φ) @ RY(θ) 门。返回 (..., 2, 2) 复数。"""
+        c = torch.cos(theta / 2)
+        s = torch.sin(theta / 2)
+        e_neg = torch.exp(-1j * phi / 2)
+        e_pos = torch.exp(1j * phi / 2)
+        row0 = torch.stack([e_neg * c, -e_neg * s], dim=-1)
+        row1 = torch.stack([e_pos * s, e_pos * c], dim=-1)
+        return torch.stack([row0, row1], dim=-2)
+
+    # ------------------------------------------------------------------ #
+    # NEW: 重构后的旋转层（改吃 h_proj）
+    # ------------------------------------------------------------------ #
+    def _apply_rot_layer(self, psi: torch.Tensor, h_proj: torch.Tensor) -> torch.Tensor:
+        """对每个 qubit i 施加 RY (和 RZ)。psi: (B,V,2^N) -> (B,V,2^N)。
+
+        h_proj: (B, V, N, angles_per_qubit)，[..., i, 0]=θ, [..., i, 1]=φ（仅 full_bloch）
+        """
         for i in range(self.N):
-            theta = math.pi * h[..., i]  # (B, V)；要求 d_token >= N（已在 __init__ 断言）
-            gate = self._gate_matrix(theta)  # (B, V, 2, 2) 复数
+            if self.use_full_bloch:
+                theta_i = math.pi * h_proj[..., i, 0]  # (B, V)
+                phi_i = math.pi * h_proj[..., i, 1]    # (B, V)
+                gate = self._rz_ry_matrix(theta_i, phi_i)
+            else:
+                theta_i = math.pi * h_proj[..., i, 0]
+                gate = self._gate_matrix(theta_i)
             psi = self._apply_single_qubit(psi, gate, i)
         return psi
 
+    # ------------------------------------------------------------------ #
+    # 首层乘积态构造（向后兼容）
+    # ------------------------------------------------------------------ #
     def _apply_rot_layer_product_state(self, h: torch.Tensor) -> torch.Tensor:
-        """首层乘积态优化：|ψ⟩ = ⊗_i [cos(θ_i/2), sin(θ_i/2)]。
+        """向后兼容接口：直接转给 _apply_rot_layer_product_state_theta。"""
+        return self._apply_rot_layer_product_state_theta(math.pi * h[..., : self.N])
 
-        只在初态 |0⟩^⊗N 上用，外积得到 product state 的精确 2^N 维态矢量。
+    # NEW: 纯 RY 产品态构造（基于已乘 π 的 theta）
+    def _apply_rot_layer_product_state_theta(self, theta: torch.Tensor) -> torch.Tensor:
+        """首层乘积态优化（仅 RY）：|ψ⟩ = ⊗_i RY(θ_i) |0⟩。
+
+        theta: (B, V, N)，已经乘过 π。
+        返回 (B, V, 2^N) cfloat。
         """
-        B, V, _ = h.shape
-        # theta: (B, V, N)；当 d_token < N 时用 `i % d_token` 循环复用
-        theta = math.pi * h[..., : self.N]  # 先取前 N 个；若 d_token < N 会因越界抛错
-        # 兼容：把 d_token < N 走 fallback 路径
-        if self.d_token < self.N:
-            idx = torch.arange(self.N, device=h.device) % self.d_token
-            theta = math.pi * h[..., idx]
+        B, V, N = theta.shape
         c = torch.cos(theta / 2)
         s = torch.sin(theta / 2)
-        # 每个 qubit 一个 2 维向量 [c, s]
-        # 外积构造：先 (B, V, N, 2)
         vec = torch.stack([c, s], dim=-1)  # (B, V, N, 2)
-        # 展平 N 个 qubit 为 2^N：fold+matmul
-        psi = vec[:, :, 0]  # (B, V, 2)
-        for i in range(1, self.N):
-            # psi (B,V,2^i)  与  vec[...,i,:] (B,V,2) 做外积 → (B,V,2^(i+1))
-            psi = (
-                psi.unsqueeze(-1) * vec[:, :, i].unsqueeze(-2)
-            ).reshape(B, V, 1 << (i + 1))
-        return psi.to(torch.cfloat)  # (B, V, 2^N)
+        psi = vec[:, :, 0]
+        for i in range(1, N):
+            psi = (psi.unsqueeze(-1) * vec[:, :, i].unsqueeze(-2)).reshape(B, V, 1 << (i + 1))
+        return psi.to(torch.cfloat)
+
+    # NEW: RY + RZ 完整 Bloch 球编码
+    def _apply_rot_layer_product_state_rz_ry(self, h_proj: torch.Tensor) -> torch.Tensor:
+        """首层乘积态优化（RY + RZ）：|ψ⟩ = ⊗_i RZ(φ_i) RY(θ_i) |0⟩。
+
+        h_proj: (B, V, N, 2)，[..., 0]=θ（未乘 π），[..., 1]=φ（未乘 π）
+        返回 (B, V, 2^N) cfloat。
+        """
+        B, V, N, _ = h_proj.shape
+        theta = math.pi * h_proj[..., 0]  # (B, V, N)
+        phi = math.pi * h_proj[..., 1]    # (B, V, N)
+
+        # RZ(φ) RY(θ) |0⟩ = e^{-iφ/2} cos(θ/2) |0⟩ + e^{iφ/2} sin(θ/2) |1⟩
+        amp_0 = torch.cos(theta / 2) * torch.exp(-1j * phi / 2)  # (B, V, N) 复数
+        amp_1 = torch.sin(theta / 2) * torch.exp(1j * phi / 2)   # (B, V, N) 复数
+
+        vec = torch.stack([amp_0, amp_1], dim=-1)  # (B, V, N, 2) 复数
+        psi = vec[:, :, 0]
+        for i in range(1, N):
+            psi = (psi.unsqueeze(-1) * vec[:, :, i].unsqueeze(-2)).reshape(B, V, 1 << (i + 1))
+        return psi
 
     # ------------------------------------------------------------------ #
     # Forward
@@ -219,27 +271,25 @@ class EntanglingFeatureMap(nn.Module):
         B, V, _ = h.shape
         device = h.device
 
-        # 数值稳定：限幅到 [-π, π] 防止 π·h 极大（保持分布尾部）
-        h = torch.clamp(h, -math.pi, math.pi)
+        # NEW: 可学习降维到每 qubit 的角度数
+        h_proj = self.input_proj(h)  # (B, V, 8) 或 (B, V, 16)
+        h_proj = torch.clamp(h_proj, -math.pi, math.pi)
+        h_proj = h_proj.reshape(B, V, self.N, self.angles_per_qubit)  # (B, V, N, 1 or 2)
 
-        # 首层：R_Y 时可用乘积态外积构造优化；R_X/R_Z 从 |0⟩^N 逐比特 matmul
-        if self.encode_gate == "R_Y":
-            psi = self._apply_rot_layer_product_state(h)  # (B, V, 2^N) 复数
+        # 首层：根据 use_full_bloch 选择
+        if self.use_full_bloch:
+            psi = self._apply_rot_layer_product_state_rz_ry(h_proj)
         else:
-            B, V, _ = h.shape
-            psi = torch.zeros(B, V, self.dim, dtype=torch.cfloat, device=device)
-            psi[..., 0] = 1.0  # |0⟩^⊗N
-            psi = self._apply_rot_layer(psi, h)
+            theta = math.pi * h_proj[..., 0]  # (B, V, N)
+            psi = self._apply_rot_layer_product_state_theta(theta)
 
-        # 每一层都加纠缠 U_ent（包括 D=1），与文档电路结构一致
         if self.entangle_topo != "none":
             psi = psi.index_select(-1, self.ent_perm)
 
-        # 后续 D-1 层：逐比特 movedim + matmul，每层 rotation + CNOT
         for l in range(1, self.D):
-            psi = self._apply_rot_layer(psi, h)  # 旋转
+            psi = self._apply_rot_layer(psi, h_proj)  # 传 h_proj 而非 h
             if self.entangle_topo != "none":
-                psi = psi.index_select(-1, self.ent_perm)  # CNOT 等价置换
+                psi = psi.index_select(-1, self.ent_perm)
         return psi
 
     # ------------------------------------------------------------------ #

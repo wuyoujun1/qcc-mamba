@@ -11,12 +11,14 @@ import random
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 import yaml
 
-from data.dataloader import build_e1_loaders
+from data.dataloader import build_e1_loaders, DATASET_FILES
+from data.dataset import SplitConfig
 from engine.evaluate import metric_table
-from engine.train import fit
+from engine.train import fit, set_global_stats, compute_global_stats
 from model.qcc_mamba import QCCMamba
 from qcc import make_kernel
 from qcc.mps_kernel import MPSBypass
@@ -111,7 +113,15 @@ def run_method(cfg: dict, method_name: str, method_cfg: dict, seed: int, device:
         patience=cfg["training"]["patience"],
         device=device,
     )
-    return history["test_mse"][-1]
+
+    # 论文标准：仅报告 MSE_norm（全局每变量标准化）
+    # 不报告 raw MSE（跨变量尺度大，不具可比性）
+    norm_values = history.get("test_mse_norm", [])
+    if norm_values and norm_values[-1] is not None and norm_values[-1] != float("inf"):
+        return norm_values[-1]
+    else:
+        # fallback: 若全局统计量没设，也返回 raw
+        return history["test_mse"][-1]
 
 
 def main():
@@ -127,6 +137,26 @@ def main():
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
+    # 预计算全局每变量标准化统计量（论文标准 MSE_norm）
+    ds_name = cfg["dataset"].lower()
+    fname = DATASET_FILES.get(ds_name, f"{ds_name}.csv")
+    data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ts_quantum", "datasets")
+    csv_path = os.path.join(data_dir, fname)
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        raw = df.iloc[:, 1:].values.astype(np.float32)
+        sc = cfg.get("split", SplitConfig(train_ratio=0.7))
+        if isinstance(sc, dict):
+            sc = SplitConfig(**sc)
+        n_train = int(len(raw) * sc.train_ratio)
+        train_raw = raw[:n_train]
+        gm, gs = compute_global_stats(train_raw)
+        set_global_stats(gm, gs)
+        print(f"全局标准化统计量: {train_raw.shape[0]} 训练样本, "
+              f"{train_raw.shape[1]} 变量, mean_std={gs.mean():.2f}")
+    else:
+        print(f"⚠️ 数据集 {csv_path} 未找到，无法计算 MSE_norm")
+
     methods = cfg["methods"]
     if args.methods:
         methods = {k: v for k, v in methods.items() if k in args.methods}
@@ -139,12 +169,12 @@ def main():
         print(f"Method: {method_name}")
         print(f"{'='*60}")
         for seed in seeds:
-            test_mse = run_method(cfg, method_name, method_cfg, seed, device)
-            results[method_name].append(test_mse)
-            print(f"  seed {seed}: test_mse={test_mse:.6f}")
+            mse_norm = run_method(cfg, method_name, method_cfg, seed, device)
+            results[method_name].append(mse_norm)
+            print(f"  seed {seed}: MSE_norm={mse_norm:.6f}")
 
     print("\n" + "=" * 60)
-    print("E1 决定性实验结果")
+    print("E1 决定性实验结果 (MSE_norm ↓)")
     print("=" * 60)
     print(metric_table(results, baseline_name="none"))
 

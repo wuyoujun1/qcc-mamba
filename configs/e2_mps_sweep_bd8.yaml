@@ -2,7 +2,7 @@
 experiment: e2_mps_sweep_bd8
 dataset: electricity
 batch_size: 32
-num_workers: 0
+num_workers: 4
 
 split:
   train_ratio: 0.7

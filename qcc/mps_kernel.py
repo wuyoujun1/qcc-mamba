@@ -1,9 +1,13 @@
 """MPS (Matrix Product State) 张量网络旁路。
 
 数学背景：
-    QCC 量子核（n_qubits=8, n_layers=2）等价于 bond_dim=2^D=4 的 MPS。
-    本模块的 MPSBypass 必须用 bond_dim 控制实际投影维度，并支持 RBF 非线性核，
-    才能与 QCC 进行有效对比（线性内积是 trivial 弱基线，不能作为 QCC 的对手）。
+    Schollwöck (2011) 证明：顺序量子电路的纠缠能力由层数 D 决定，
+    MPS bond_dim = 2^D 编码相同的纠缠表达能力。
+    QCC(n_qubits=8, n_layers=2) 的 Hilbert 空间 = 2^8 = 256 维，
+    MPS(bond_dim=4) 的键空间 = 4 维——两者纠缠能力等价，但函数空间不等价。
+    本模块的 MPSBypass 用 bond_dim 控制投影维度，配合 RBF 非线性核，
+    提供与 QCC 进行有效对比的经典基线（线性内积是 trivial 弱基线，
+    不能作为 QCC 的对手）。
 
 关键设计（修订版）：
     1. W 的输出维度 = bond_dim（而不是 d_token），bond_dim 才有意义
@@ -32,14 +36,16 @@ class MPSBypass(nn.Module):
     与 QCCBlock 的唯一区别：K 来自"经典可训练投影 + 可选 RBF/Poly 非线性"，
                             而非量子 feature map。
     当 bond_dim = 2^n_layers 且 kernel_type='rbf' 时，本旁路
-    在数学上等价于 QCC（Schollwöck 2011, Ann. Phys.）。
+    的纠缠表达能力等价于 n_layers 层顺序量子电路（Schollwöck 2011）。
+    注：等价的是纠缠能力（entanglement expressivity），不是完整函数空间
+    ——QCC 的 Hilbert 空间维度（2^N）通常远大于 MPS 的键空间（bond_dim）。
     """
 
     def __init__(
         self,
         d_token: int = 128,
         horizon: int = 96,
-        bond_dim: int = 4,           # 默认改 4：等价于 QCC(n_qubits=8, n_layers=2)
+        bond_dim: int = 4,           # 默认改 4：纠缠能力等价于 QCC(n_qubits=8, n_layers=2)
         alpha0: float = 0.1,
         use_layer_norm: bool = True,
         pre_norm: bool = True,
@@ -64,7 +70,7 @@ class MPSBypass(nn.Module):
             self.pre_ln = nn.LayerNorm(d_token)
 
         # 关键修复：W 输出维度 = bond_dim（不再是 d_token）
-        # 这样 bond_dim=4 + RBF 才能等价于 QCC(n_qubits=8, n_layers=2)
+        # 这样 bond_dim=4 + RBF 的纠缠能力对齐 QCC(n_qubits=8, n_layers=2)
         self.W = nn.Linear(d_token, bond_dim, bias=False)
 
         # 跨变量消息映射
@@ -78,8 +84,8 @@ class MPSBypass(nn.Module):
         if use_layer_norm:
             self.ln = nn.LayerNorm(d_token)
 
-        # 可学习融合系数 α
-        self.alpha = nn.Parameter(torch.tensor(alpha0))
+        # 可学习融合系数 α（softplus 保证 > 0）
+        self._alpha_raw = nn.Parameter(torch.tensor(alpha0).log())
 
         # 跨变量特征 → 预测修正
         self.proj = nn.Linear(d_token, horizon)
@@ -88,6 +94,11 @@ class MPSBypass(nn.Module):
     def sigma(self) -> torch.Tensor:
         """RBF 带宽（保证 > 0）。"""
         return torch.nn.functional.softplus(self._sigma_raw) + 1e-4
+
+    @property
+    def alpha(self) -> torch.Tensor:
+        """非负融合系数。"""
+        return torch.nn.functional.softplus(self._alpha_raw)
 
     def compute_kernel(self, H: torch.Tensor) -> torch.Tensor:
         """根据 kernel_type 计算核矩阵 K[b, i, j]。
@@ -109,10 +120,10 @@ class MPSBypass(nn.Module):
             inner = torch.einsum("bvi,bwi->bvw", Hw, Hw)
             return (inner + self.poly_constant) ** self.poly_degree
 
-        # rbf: K[b,i,j] = exp(-||H_i - H_j||^2 / 2σ^2)
-        # 用 cdist 稳定计算
+        # rbf: K[b,i,j] = exp(-||H_i - H_j||^2 / (2σ^2 + eps))
+        # 分母加 eps 防止 σ→0 时数值爆炸
         dist_sq = torch.cdist(Hw, Hw, p=2.0).pow(2)  # (B, V, V)
-        return torch.exp(-dist_sq / (2.0 * self.sigma.pow(2)))
+        return torch.exp(-dist_sq / (2.0 * self.sigma.pow(2) + 1e-6))
 
     def forward(self, H: torch.Tensor, y_main: torch.Tensor):
         """H: (B, V, d), y_main: (B, H, V) → (y, K, correction_raw)。"""
@@ -147,7 +158,7 @@ class MPSLayer(nn.Module):
         if self.kernel_type == "linear":
             return torch.einsum("bvi,bwi->bvw", Hw, Hw)
         dist_sq = torch.cdist(Hw, Hw, p=2.0).pow(2)
-        return torch.exp(-dist_sq / (2.0 * self.sigma.pow(2)))
+        return torch.exp(-dist_sq / (2.0 * self.sigma.pow(2) + 1e-6))
 
 
 __all__ = ["MPSBypass", "MPSLayer"]

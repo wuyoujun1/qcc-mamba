@@ -1,7 +1,7 @@
 experiment: e2_traffic_qcc
 dataset: traffic
 batch_size: 16
-num_workers: 0
+num_workers: 4
 
 split:
   train_ratio: 0.7

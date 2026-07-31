@@ -65,6 +65,7 @@ class QCCMamba(nn.Module):
         revin_affine: bool = True,
         bond_dim: int = 8,
         kernel_type: str = "rbf",
+        use_full_bloch: bool = True,  # NEW
     ):
         super().__init__()
         self.num_var = num_var
@@ -112,6 +113,7 @@ class QCCMamba(nn.Module):
                 use_fmap=use_fmap,
                 alpha0=alpha0,
                 pre_norm=True,
+                use_full_bloch=use_full_bloch,  # NEW
             )
         else:
             self.qcc = MPSBypass(

@@ -2,7 +2,7 @@
 experiment: e3_longterm
 dataset: electricity
 batch_size: 16      # L=8760 时显存压力大，建议 8-16
-num_workers: 0
+num_workers: 4
 
 # 数据划分
 split:

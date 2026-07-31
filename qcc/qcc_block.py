@@ -53,6 +53,7 @@ class QCCBlock(nn.Module):
         alpha0: float = 0.1,
         use_layer_norm: bool = True,
         pre_norm: bool = True,
+        use_full_bloch: bool = True,  # NEW
     ):
         super().__init__()
         self.d_token = d_token
@@ -70,6 +71,7 @@ class QCCBlock(nn.Module):
                 d_token=d_token,
                 entangle_topo=entangle_topo,
                 encode_gate=encode_gate,
+                use_full_bloch=use_full_bloch,  # NEW
             )
 
         # 决定性实验：传入具体核函数
@@ -82,11 +84,16 @@ class QCCBlock(nn.Module):
         if use_layer_norm:
             self.ln = nn.LayerNorm(d_token)
 
-        # 可学习融合系数 α
-        self.alpha = nn.Parameter(torch.tensor(alpha0))
+        # 可学习融合系数 α（softplus 保证 > 0）
+        self._alpha_raw = nn.Parameter(torch.tensor(alpha0).log())
 
         # 跨变量特征 → 预测修正 (B, V, d) → (B, V, H)
         self.proj = nn.Linear(d_token, horizon)
+
+    @property
+    def alpha(self) -> torch.Tensor:
+        """非负融合系数。"""
+        return torch.nn.functional.softplus(self._alpha_raw)
 
     # ------------------------------------------------------------------ #
     def compute_kernel(self, H_norm: torch.Tensor) -> torch.Tensor:

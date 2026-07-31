@@ -78,13 +78,21 @@ def build_e1_loaders(
     if isinstance(split_cfg, dict):
         split_cfg = SplitConfig(**split_cfg)
     sc = split_cfg or SplitConfig(train_ratio=0.7, test_ratio=0.2)
+    # 数据集对应频率（影响 add_time_features 是否取 minute）
+    DATASET_FREQ = {
+        "electricity": "h",
+        "traffic": "h",
+        "weather": "t",
+        "solar": "t",
+        "exchange": "d",
+    }
     # ECL/Traffic/Weather/Solar/Exchange 用 ECL 格式；ETT 系列用 ET
     if name.startswith("ett"):
         ds_cls = ETDataset
         kwargs = dict(freq="h" if name.startswith("etth") else "t")
     else:
         ds_cls = ECLDataset
-        kwargs = dict()
+        kwargs = dict(freq=DATASET_FREQ.get(name, "h"))
     common = dict(
         csv_path=csv_path,
         lookback=lookback,

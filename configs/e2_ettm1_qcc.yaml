@@ -2,7 +2,7 @@
 experiment: e2_ettm1_qcc
 dataset: ettm1
 batch_size: 128
-num_workers: 0
+num_workers: 4
 
 split:
   train_ratio: 0.7

@@ -168,12 +168,14 @@ def fit(
     device: torch.device = torch.device("cpu"),
     save_dir: Optional[str] = None,
     run_name: str = "model",
+    initial_epoch: int = 0,
 ) -> Dict[str, list]:
     """完整训练 + early stopping + checkpoint。
 
     Args:
         save_dir: 最佳模型保存目录（传 None 则不保存）。
         run_name: checkpoint 文件名前缀。
+        initial_epoch: 起始 epoch（续训时从 checkpoint 的 epoch 开始）。
 
     Returns:
         history: {"train_loss": [...], "val_mse": [...], "test_mse": [...]}
@@ -186,7 +188,7 @@ def fit(
                "val_mae_norm": [], "test_mae_norm": []}
     best_state = None
 
-    for epoch in range(epochs):
+    for epoch in range(initial_epoch, epochs):
         train_metrics = train_one_epoch(model, loaders["train"], optimizer, device)
         val_metrics = evaluate(model, loaders["val"], device)
         test_metrics = evaluate(model, loaders["test"], device)
@@ -238,6 +240,8 @@ def fit(
                     {
                         "epoch": epoch + 1,
                         "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "scheduler_state_dict": scheduler.state_dict() if scheduler else None,
                         "val_mse": best_val,
                         "test_mse": test_metrics["mse"],
                         "mse_norm": test_metrics.get("mse_norm", None),
