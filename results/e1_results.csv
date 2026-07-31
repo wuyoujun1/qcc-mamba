@@ -1,0 +1,4 @@
+method,label,n_seeds,seeds_detail,mse_norm_mean,mse_norm_std
+quantum,Quantum,3,"[0.244565, 0.234441, 0.235139]",0.238048,0.004617
+mps_bd2,MPS bd=2,3,"[0.243349, 0.241831, 0.239074]",0.241418,0.00177
+mps_bd4,MPS bd=4,3,"[0.249472, 0.239412, 0.244642]",0.244509,0.004108
