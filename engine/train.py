@@ -1,16 +1,17 @@
 """训练循环。
 
 提供：
-- train_one_epoch：一个 epoch 的训练。
+- train_one_epoch：一个 epoch 的训练（支持 AMP + 梯度累积）。
 - evaluate：在 val/test 上评估，返回 MSE/MAE。
 - fit：完整训练 + early stopping + lr scheduling。
+- build_optimizer：构建优化器（支持投影层权重衰减豁免）。
 
-对应文档：experiment-design.md §八
+对应文档：IDEA_DualAE_QCC.md §0.1 / experiment-design.md §八
 """
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import numpy as np
 import torch
@@ -41,16 +42,28 @@ def train_one_epoch(
     loader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    scaler: Optional[torch.cuda.amp.GradScaler] = None,
+    accumulation_steps: int = 1,
 ) -> Dict[str, float]:
-    """训练一个 epoch。
+    """训练一个 epoch（支持 AMP + 梯度累积）。
 
-    假设 model 是 QCCMamba，数据项为 (x, y, x_mark, y_mark) 或 (x, y)。
+    Args:
+        model: QCCMamba 模型。
+        loader: 训练数据加载器。
+        optimizer: 优化器。
+        device: 设备。
+        scaler: AMP GradScaler（可选，用于混合精度训练）。
+        accumulation_steps: 梯度累积步数（默认 1 = 不累积）。
+
+    Returns:
+        {"loss": 平均损失}
     """
     model.train()
     total_loss = 0.0
     n_batches = 0
+    optimizer.zero_grad()
 
-    for batch in loader:
+    for batch_idx, batch in enumerate(loader):
         if len(batch) == 4:
             x, y_true, x_mark, _ = batch
             x_mark = x_mark.to(device)
@@ -61,31 +74,49 @@ def train_one_epoch(
         x = x.to(device)
         y_true = y_true.to(device)
 
-        optimizer.zero_grad()
+        # AMP 混合精度前向
+        with torch.cuda.amp.autocast(enabled=scaler is not None):
+            # 前向（返回归一化空间用于损失）
+            y_pred, y_main, _, y_norm, y_main_norm, correction_norm = model(
+                x, x_mark=x_mark, return_norm=True
+            )
 
-        # 前向（返回归一化空间用于损失）
-        y_pred, y_main, _, y_norm, y_main_norm, correction_norm = model(
-            x, x_mark=x_mark, return_norm=True
-        )
+            # 目标也需要在归一化空间，但必须使用 x 的 RevIN 统计量（与 y_norm 一致）
+            with torch.no_grad():
+                x_mean = model.revin.mean
+                x_stdev = model.revin.stdev
+                y_true_norm = (y_true - x_mean) / x_stdev
+                if model.revin.affine:
+                    y_true_norm = y_true_norm * model.revin.affine_weight + model.revin.affine_bias
 
-        # 目标也需要在归一化空间，但必须使用 x 的 RevIN 统计量（与 y_norm 一致）
-        with torch.no_grad():
-            x_mean = model.revin.mean
-            x_stdev = model.revin.stdev
-            y_true_norm = (y_true - x_mean) / x_stdev
-            if model.revin.affine:
-                y_true_norm = y_true_norm * model.revin.affine_weight + model.revin.affine_bias
+            loss = model.compute_loss(
+                y_pred, y_main, y_true, y_norm, y_main_norm, y_true_norm, correction_norm
+            )
+            # 梯度累积：损失除以累积步数
+            loss = loss / accumulation_steps
 
-        loss = model.compute_loss(
-            y_pred, y_main, y_true, y_norm, y_main_norm, y_true_norm, correction_norm
-        )
-        loss.backward()
+        # AMP 反向
+        if scaler is not None:
+            scaler.scale(loss).backward()
+        else:
+            loss.backward()
 
-        # 梯度裁剪
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+        # 梯度累积：每 accumulation_steps 步更新一次
+        if (batch_idx + 1) % accumulation_steps == 0:
+            # 梯度裁剪（AMP 需要先 unscale）
+            if scaler is not None:
+                scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
-        total_loss += loss.item()
+            # 优化器步进
+            if scaler is not None:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+            optimizer.zero_grad()
+
+        total_loss += loss.item() * accumulation_steps  # 还原真实损失
         n_batches += 1
 
     return {"loss": total_loss / max(n_batches, 1)}
@@ -169,6 +200,8 @@ def fit(
     save_dir: Optional[str] = None,
     run_name: str = "model",
     initial_epoch: int = 0,
+    use_amp: bool = False,
+    accumulation_steps: int = 1,
 ) -> Dict[str, list]:
     """完整训练 + early stopping + checkpoint。
 
@@ -176,6 +209,8 @@ def fit(
         save_dir: 最佳模型保存目录（传 None 则不保存）。
         run_name: checkpoint 文件名前缀。
         initial_epoch: 起始 epoch（续训时从 checkpoint 的 epoch 开始）。
+        use_amp: 是否使用混合精度训练（AMP）。
+        accumulation_steps: 梯度累积步数（默认 1 = 不累积）。
 
     Returns:
         history: {"train_loss": [...], "val_mse": [...], "test_mse": [...]}
@@ -188,8 +223,14 @@ def fit(
                "val_mae_norm": [], "test_mae_norm": []}
     best_state = None
 
+    # AMP GradScaler
+    scaler = torch.cuda.amp.GradScaler() if use_amp and device.type == "cuda" else None
+
     for epoch in range(initial_epoch, epochs):
-        train_metrics = train_one_epoch(model, loaders["train"], optimizer, device)
+        train_metrics = train_one_epoch(
+            model, loaders["train"], optimizer, device,
+            scaler=scaler, accumulation_steps=accumulation_steps
+        )
         val_metrics = evaluate(model, loaders["val"], device)
         test_metrics = evaluate(model, loaders["test"], device)
 
@@ -203,11 +244,16 @@ def fit(
         history["val_mae_norm"].append(val_metrics.get("mae_norm", float("inf")))
         history["test_mae_norm"].append(test_metrics.get("mae_norm", float("inf")))
 
-        # 记录旁路权重 α（QCCBlock 有 alpha 参数）
+        # 记录旁路权重 α 和 γ（QCCBlock 有 alpha/gamma 参数）
         alpha_val = None
-        if hasattr(model, 'qcc') and hasattr(model.qcc, 'alpha'):
-            alpha_val = model.qcc.alpha.item()
+        gamma_val = None
+        if hasattr(model, 'qcc'):
+            if hasattr(model.qcc, 'alpha'):
+                alpha_val = model.qcc.alpha.item()
+            if hasattr(model.qcc, 'gamma'):
+                gamma_val = model.qcc.gamma.item()
         history.setdefault("alpha", []).append(alpha_val)
+        history.setdefault("gamma", []).append(gamma_val)
 
         if scheduler is not None:
             scheduler.step()
@@ -221,6 +267,8 @@ def fit(
             extra += f"  MAE_norm={man:.6f}"
         if alpha_val is not None:
             extra += f"  α={alpha_val:.4f}"
+        if gamma_val is not None:
+            extra += f"  γ={gamma_val:.4f}"
         print(
             f"Epoch {epoch + 1}/{epochs}  "
             f"train_loss={train_metrics['loss']:.6f}  "
@@ -242,6 +290,7 @@ def fit(
                         "model_state_dict": model.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict() if scheduler else None,
+                        "scaler_state_dict": scaler.state_dict() if scaler else None,
                         "val_mse": best_val,
                         "test_mse": test_metrics["mse"],
                         "mse_norm": test_metrics.get("mse_norm", None),
@@ -262,4 +311,45 @@ def fit(
     return history
 
 
-__all__ = ["train_one_epoch", "evaluate", "fit"]
+def build_optimizer(
+    model: nn.Module,
+    lr: float = 1e-4,
+    weight_decay: float = 1e-5,
+    proj_weight_decay: Optional[float] = None,
+) -> torch.optim.Optimizer:
+    """构建优化器（支持投影层权重衰减豁免）。
+
+    Args:
+        model: QCCMamba 模型。
+        lr: 学习率。
+        weight_decay: 默认权重衰减。
+        proj_weight_decay: 投影层权重衰减（None = 使用默认，0 = 豁免）。
+            建议对 proj_H / proj_S / proj / W_q 等投影层使用较小的权重衰减。
+
+    Returns:
+        AdamW 优化器。
+    """
+    if proj_weight_decay is None:
+        # 不区分，全部用默认 weight_decay
+        return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    # 区分投影层和普通参数
+    proj_params = []
+    normal_params = []
+
+    # 投影层关键词
+    proj_keywords = ["proj_H", "proj_S", "proj", "W_q"]
+
+    for name, param in model.named_parameters():
+        if any(kw in name for kw in proj_keywords):
+            proj_params.append(param)
+        else:
+            normal_params.append(param)
+
+    return torch.optim.AdamW([
+        {"params": normal_params, "lr": lr, "weight_decay": weight_decay},
+        {"params": proj_params, "lr": lr, "weight_decay": proj_weight_decay},
+    ])
+
+
+__all__ = ["train_one_epoch", "evaluate", "fit", "build_optimizer"]

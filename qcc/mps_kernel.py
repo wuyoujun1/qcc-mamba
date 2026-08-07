@@ -18,10 +18,19 @@
 """
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn as nn
 
 from .message_passing import message_passing
+
+
+def _inv_softplus(target: float, lo: float = -20.0) -> float:
+    """求 x 使 softplus(x) = target。target<=0 时返回 lo（softplus(lo)≈0）。"""
+    if target <= 0:
+        return lo
+    return math.log(math.expm1(target))
 
 
 class MPSBypass(nn.Module):
@@ -76,16 +85,16 @@ class MPSBypass(nn.Module):
         # 跨变量消息映射
         self.W_q = nn.Linear(d_token, d_token, bias=False)
 
-        # RBF 带宽（可学习，sigma^2 = softplus(raw) 保证 > 0）
+        # RBF 带宽（可学习，softplus 保证 > 0），init 使 sigma == rbf_sigma
         if kernel_type == "rbf":
-            self._sigma_raw = nn.Parameter(torch.tensor(rbf_sigma).log())
+            self._sigma_raw = nn.Parameter(torch.tensor(_inv_softplus(rbf_sigma - 1e-4)))
 
         self.use_layer_norm = use_layer_norm
         if use_layer_norm:
             self.ln = nn.LayerNorm(d_token)
 
-        # 可学习融合系数 α（softplus 保证 > 0）
-        self._alpha_raw = nn.Parameter(torch.tensor(alpha0).log())
+        # 可学习融合系数 α（softplus 保证 > 0），init 使 softplus(_alpha_raw) == alpha0
+        self._alpha_raw = nn.Parameter(torch.tensor(_inv_softplus(alpha0)))
 
         # 跨变量特征 → 预测修正
         self.proj = nn.Linear(d_token, horizon)
@@ -147,7 +156,8 @@ class MPSLayer(nn.Module):
         self.kernel_type = kernel_type
         self.W = nn.Linear(d_token, bond_dim, bias=False)
         if kernel_type == "rbf":
-            self._sigma_raw = nn.Parameter(torch.tensor(1.0).log())
+            # init 使 softplus(_sigma_raw) + 1e-4 == 1.0
+            self._sigma_raw = nn.Parameter(torch.tensor(_inv_softplus(1.0 - 1e-4)))
 
     @property
     def sigma(self) -> torch.Tensor:

@@ -1,7 +1,7 @@
 # TSL（Time-Series-Library）社区标准协议
 
 > 本文档梳理 THUML 维护的 Time-Series-Library（TSL，https://github.com/thuml/Time-Series-Library ）约定的标准协议，用于：
-> 1. 与 QCC-Mamba 当前实现做差距分析
+> 1. 与 DualAE-QCC 当前实现做差距分析
 > 2. 实验跑完后对齐论文表格（避免被审稿人"为什么不和 SOTA 对比"打回）
 > 3. 评判"什么算合规的 LSF 实验"
 >
@@ -51,7 +51,9 @@ ETTh: train=12mo, val=4mo, test=4mo  →  8640 : 2880 : 2880
 ETTm: train=12mo, val=4mo, test=4mo  →  34560 : 11520 : 11520
 ```
 
-> ⚠️ **ETT 圈是按月切，不是按比例**。即使你的比例算下来是 6:2:2，TSL 也只认 12mo:4mo:4mo。QCC-Mamba 当前的 `train_ratio=0.7, test_ratio=0.2` 在 ETT 上是违规的。
+> ⚠️ **ETT 圈是按月切，不是按比例**。即使你的比例算下来是 6:2:2，TSL 也只认 12mo:4mo:4mo。
+>
+> ✅ **DualAE-QCC 已修正**：`data/dataset.py` 中 ETT 系列默认使用 `use_months=True`，按 12mo:4mo:4mo 划分。
 >
 > 实际切分在 TSL 里是写死的边界 index（ETTh: 0..8640 / 8640..11520 / 11520..14400），前 14400 步是按月切出来的，最后 3020 步通常被丢弃或纳入 train。
 
@@ -67,7 +69,7 @@ ETTm: train=12mo, val=4mo, test=4mo  →  34560 : 11520 : 11520
 
 每个数据集 × 4 个 H = **每模型 32 个数**（ECL 4H + Weather 4H + Traffic 4H + ETT 4×4H + Exch 4H），这就是论文表格里"密密麻麻 32 行数"的来源。
 
-> ⚠️ **TSL 表格里不会有 L=720, H=96 这种"超长输入短输出"配置**。QCC-Mamba E1 (L=720, H=96) 不属于 TSL 标准动作——这其实是 iTransformer 之后才出现的"超长输入"实验变种。
+> ⚠️ **TSL 表格里不会有 L=720, H=96 这种"超长输入短输出"配置**。"超长输入"实验是 iTransformer 之后才出现的变种，不属于 TSL 标准动作。
 
 ---
 
@@ -90,7 +92,7 @@ ETTm: train=12mo, val=4mo, test=4mo  →  34560 : 11520 : 11520
 | seed | 2024 / 0（默认）| 同 |
 | n_seeds | 1（多数）/ 3（严谨）| 同 |
 
-> QCC-Mamba 当前超参：lr=1e-4 ✅、epochs=100 ✅、patience=10 ✅、d_token=128（TSL 用 d_model=512，**偏离但合理**——ECL 321 变量用 512 容易过拟合）。
+> ✅ **DualAE-QCC 已修正**：d_model=512（TSL 合规），lr=1e-4 ✅、epochs=100 ✅、patience=10 ✅。支持 AMP 混合精度训练和梯度累积。
 
 ---
 
@@ -120,7 +122,7 @@ test_x = (test_data - scaler.mean) / scaler.std  # 同一个 mean/std
 y_pred_real = y_pred * scaler.std + scaler.mean
 ```
 
-> QCC-Mamba 当前用 per-window RevIN（[preprocess.py:19-63](file:///d:/download/qutest/qcc_mamba/data/preprocess.py#L19-L63)），偏离 TSL 标准；fe19d18 新加的 `mse_norm`（[train.py:98-162](file:///d:/download/qutest/qcc_mamba/engine/train.py#L98-L162)）已经在按 TSL 方式算 per-channel mean/std，是**双轨制**——最终应统一到 TSL 风格。
+> ⚠️ **DualAE-QCC 当前状态**：仍使用 per-window RevIN，但已支持 TSL 风格的 per-channel StandardScaler（通过配置切换）。建议在正式实验中使用 TSL 标准。
 
 ---
 
@@ -141,40 +143,45 @@ def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
 
 > 即使不用 decoder（如 DLinear / iTransformer / NLinear），**接口也必须带 `x_dec` / `x_mark_dec`**。TSL 框架对所有模型统一这一个签名，方便 swap-in/swap-out。
 >
-> QCC-Mamba 当前签名：```forward(self, x, x_mark=None, return_norm=False)``` → **不兼容 TSL**，跑 TSL 框架时需要 adapter 包一层。
+> ⚠️ **DualAE-QCC 当前状态**：forward 接口为 `forward(x, x_mark=None, return_norm=False)`，**不兼容 TSL**。需要在跑 TSL 框架实验时写 adapter 包装。
 
 ---
 
-## 8. QCC-Mamba 与 TSL 的差距分析
+## 8. DualAE-QCC 与 TSL 的差距分析
 
-| 维度 | TSL 标准 | QCC-Mamba 当前 | 差距 |
-|------|----------|----------------|:----:|
-| 数据集 | 8 个 LSF | ECL only | ⚠️ 偏窄 |
+| 维度 | TSL 标准 | DualAE-QCC 当前 | 差距 |
+|------|----------|-----------------|:----:|
+| 数据集 | 8 个 LSF | 支持 12 个（含 ECL/Weather/Traffic/ETT 等） | ✅ |
 | Split（ECL） | 7:1:2 | 7:1:2 | ✅ |
-| Split（ETT） | 12mo:4mo:4mo | 比例（违规）| ⚠️ |
-| L | 96 | 96 ~ 17520 | ⚠️ 偏离 |
-| H | {96, 192, 336, 720} | =L 或 720 | ⚠️ 偏离 |
+| Split（ETT） | 12mo:4mo:4mo | 12mo:4mo:4mo（已修正） | ✅ |
+| d_model | 512 | 512（已修正） | ✅ |
+| L | 96 | 支持 96/192/336/720 | ✅ |
+| H | {96, 192, 336, 720} | 支持 96/192/336/720 | ✅ |
 | MSE / MAE | 必报 | 必报 | ✅ |
-| 标准化 | Train per-var StandardScaler | Per-window RevIN + 新加 mse_norm | ⚠️ 双轨制 |
-| n_seeds | 1 ~ 3 | 1 | ✅ |
+| 标准化 | Train per-var StandardScaler | Per-window RevIN（待统一） | ⚠️ |
+| n_seeds | 1 ~ 3 | 支持多 seed | ✅ |
 | Forward 接口 | `(x_enc, x_mark_enc, x_dec, x_mark_dec)` | `(x, x_mark, return_norm)` | ⚠️ 不兼容 |
-| 同表 SOTA | 必要 | 无 | ❌ |
-| 完整数据表 | 8 数据集 × 4 H = 32 数 | 1 数据集 × 少数 L/H | ⚠️ 偏少 |
-| QCC 创新点 | - | 量子核 + 残差辅助 | ✅+ |
+| 同表 SOTA | 必要 | 待跑实验 | ❌ |
+| 完整数据表 | 8 数据集 × 4 H = 32 数 | 待跑实验 | ⚠️ 待完成 |
+| 创新点 | - | 时频双阶段对齐 + 量子核 | ✅+ |
 
 ---
 
-## 9. TSL 对齐 Checklist（E1 通过后按顺序补齐）
+## 9. TSL 对齐 Checklist
 
-- [ ] **加数据集**：Weather / Traffic / ETTh1 / ETTh2 至少 2 个（推荐 ETT 圈必有）
-- [ ] **对齐 ETT split**：用 12mo:4mo:4mo 而非比例（[data/dataset.py](file:///d:/download/qutest/qcc_mamba/data/dataset.py) 加 ETT 专用切分逻辑）
-- [ ] **补 L=96 标准配置**：E2 加 L=96, H∈{96, 192, 336, 720} 全套（与 TSL 表对齐）
+### ✅ 已完成
+- [x] **加数据集**：支持 12 个数据集（ECL/Weather/Traffic/Exchange/ETTh1/h2/ETTm1/m2/ChinaAQI/METR_LA/PEMS_BAY/ILI）
+- [x] **对齐 ETT split**：ETT 系列默认使用 12mo:4mo:4mo 月份划分
+- [x] **d_model 修正**：从 128 修正为 512（TSL 合规）
+- [x] **支持标准 L/H 配置**：支持 L=96, H∈{96, 192, 336, 720}
+
+### ⏳ 待完成
 - [ ] **改 forward 接口**：加 `x_dec` / `x_mark_dec`（即使不用 decoder），写一层 TSL adapter
 - [ ] **统一标准化**：删除 per-window RevIN，改用 TSL 风格 StandardScaler（保留 RevIN 作 ablation 即可）
 - [ ] **跑 TSL 里的 SOTA baseline**：iTransformer / PatchTST / DLinear 至少 3 个
-- [ ] **统一报数表**：每个 (dataset, L, H) 一行，QCC vs SOTA 同表
+- [ ] **统一报数表**：每个 (dataset, L, H) 一行，DualAE-QCC vs SOTA 同表
 - [ ] **n_seeds ≥ 3**：关键 dataset（H=720）必须 3 seeds ± std
-- [ ] **加 E1 通过判据**：与 [REVIEW.md §6.4](file:///d:/download/qutest/qcc_mamba/REVIEW.md#L255-L259) 联动（量子核 vs 最佳经典核 MSE 提升 ≥ 5%，p < 0.05）
+- [ ] **完整实验**：8 数据集 × 4 H = 32 组实验
 
 ---
 
@@ -188,7 +195,7 @@ def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
 | 时序分类 | UCR / UEA | 原始 train/test | aeon-toolkit | NeurIPS / DMKD |
 | 时间序列基础模型 | 各数据集混合 | 各种 | GIFT-Eval | NeurIPS 2024+ |
 
-> QCC-Mamba 当前属 **LSF 圈**。论文投稿前应确认目标 venue（AAAI/ICLR/NeurIPS），LSF 圈审稿人认 TSL 协议。
+> DualAE-QCC 当前属 **LSF 圈**。论文投稿前应确认目标 venue（AAAI/ICLR/NeurIPS），LSF 圈审稿人认 TSL 协议。
 
 ---
 
@@ -205,7 +212,7 @@ def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
 | iTransformer | *iTransformer: Inverted Transformers Are Effective for Time Series Forecasting* | ICLR 2024 | **当前 SOTA** |
 | TimeMixer | *TimeMixer: Decomposable Multiscale Mixing for Time Series Forecasting* | ICLR 2024 | 长序列 SOTA |
 
-> QCC-Mamba 论文必须至少跟 **iTransformer / PatchTST / DLinear** 同表对比——这三个是"刷不动"的硬 baseline。
+> DualAE-QCC 论文必须至少跟 **iTransformer / PatchTST / DLinear** 同表对比——这三个是"刷不动"的硬 baseline。
 
 ---
 
@@ -241,5 +248,5 @@ Time-Series-Library/
 
 ---
 
-*最后更新：2026-07-29*
-*对应项目：QCC-Mamba（[REVIEW.md](file:///d:/download/qutest/qcc_mamba/REVIEW.md)）*
+*最后更新：2026-08-07*
+*对应项目：DualAE-QCC（[IDEA_DualAE_QCC.md](file:///d:/download/qutest/qcc_mamba/IDEA_DualAE_QCC.md)）*

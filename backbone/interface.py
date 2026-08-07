@@ -55,8 +55,8 @@ class MockBackbone(BaseBackbone):
         num_var: int = 321,
         lookback: int = 720,
         horizon: int = 96,
-        d_model: int = 128,
-        d_token: int = 64,
+        d_model: int = 512,
+        d_token: int = 256,
         n_layers: int = 2,
         dropout: float = 0.1,
     ):

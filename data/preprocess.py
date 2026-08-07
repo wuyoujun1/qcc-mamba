@@ -63,33 +63,22 @@ class RevIN(nn.Module):
         return x * self.stdev + self.mean
 
 
-class PeriodicTimeFeatures(nn.Module):
-    """周期时间特征：sin/cos(hour/24), sin/cos(dow/7)。
+class IntegerTimeFeatures(nn.Module):
+    """整数时间特征（与 S-Mamba 官方一致）。
 
-    输入：x_mark (B, L, 2) [hour, dow]（0-23, 0-6）
-    输出：周期特征 (B, L, 4) 或拼接后 (B, L, 4+d_extra)
+    输入：x_mark (B, L, 4) [month, day, weekday, hour]（整数）
+    输出：整数特征 (B, L, 4) 直接透传，作为伪变量 token 进 backbone
+
+    注意：与官方 timeenc=0 一致，不做 sin/cos 编码
     """
 
-    def __init__(self, include_high_freq: bool = False, high_freq_periods=(24, 12, 8, 6)):
+    def __init__(self):
         super().__init__()
-        self.include_high_freq = include_high_freq
-        self.high_freq_periods = high_freq_periods
 
     def forward(self, x_mark: torch.Tensor) -> torch.Tensor:
-        """x_mark: (B, L, [hour, dow, ...]) — 至少 2 维。"""
-        hour = x_mark[..., 0:1]  # (B, L, 1)
-        dow = x_mark[..., 1:2]
-        feats = [
-            torch.sin(2 * math.pi * hour / 24),
-            torch.cos(2 * math.pi * hour / 24),
-            torch.sin(2 * math.pi * dow / 7),
-            torch.cos(2 * math.pi * dow / 7),
-        ]
-        if self.include_high_freq:
-            for p in self.high_freq_periods:
-                feats.append(torch.sin(2 * math.pi * hour / p))
-                feats.append(torch.cos(2 * math.pi * hour / p))
-        return torch.cat(feats, dim=-1)
+        """x_mark: (B, L, 4) [month, day, weekday, hour] — 整数。"""
+        # 直接透传整数特征，不做任何变换
+        return x_mark.float()
 
 
 def fourier_high_freq(B: int, L: int, t: Optional[torch.Tensor] = None,
@@ -117,24 +106,34 @@ def fourier_high_freq(B: int, L: int, t: Optional[torch.Tensor] = None,
 
 
 def add_time_features(ts_index: np.ndarray, freq: str = "h") -> np.ndarray:
-    """从 pandas DateTimeIndex 抽出 (hour, dow[, month])。
+    """从 pandas DateTimeIndex 抽出整数时间特征（与 S-Mamba 官方一致）。
+
+    返回：(T, F) 数组
+    - 小时级（freq='h'）：4 列 [month, day, weekday, hour]
+    - 分钟级（freq='t'/'15min'/'min'）：5 列 [month, day, weekday, hour, minute//15]
 
     Args:
         ts_index: 长度 T 的 DatetimeIndex。
-        freq: "h"/"t"/"15min" — 仅用于判定是否取 minute。
+        freq: 频率字符串，'h' 为小时级，'t'/'15min'/'min' 为分钟级
     """
-    hour = ts_index.hour.values.astype(np.float32)
-    dow = ts_index.dayofweek.values.astype(np.float32)
-    feats = [hour, dow]
+    month = ts_index.month.values.astype(np.float32)      # 1-12
+    day = ts_index.day.values.astype(np.float32)          # 1-31
+    weekday = ts_index.dayofweek.values.astype(np.float32)  # 0-6 (Monday=0)
+    hour = ts_index.hour.values.astype(np.float32)        # 0-23
+
+    feats = [month, day, weekday, hour]
+
+    # 分钟级数据追加 minute//15 特征（与官方 Dataset_ETT_minute 一致）
     if freq in ("t", "15min", "min"):
-        minute = ts_index.minute.values.astype(np.float32)
-        feats.insert(0, minute)
-    return np.stack(feats, axis=-1)  # (T, F)
+        minute_bin = (ts_index.minute.values // 15).astype(np.float32)  # 0-3
+        feats.append(minute_bin)
+
+    return np.stack(feats, axis=-1)  # (T, 4) 或 (T, 5)
 
 
 __all__ = [
     "RevIN",
-    "PeriodicTimeFeatures",
+    "IntegerTimeFeatures",
     "fourier_high_freq",
     "add_time_features",
 ]

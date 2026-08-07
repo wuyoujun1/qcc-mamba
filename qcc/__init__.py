@@ -1,4 +1,4 @@
-"""量子核 QCC 旁路模块：feature map / kernel / classical kernel / message passing / block。"""
+"""量子核 QCC 旁路模块：feature map / kernel / classical kernel / message passing / block / spectrum。"""
 from .feature_map import EntanglingFeatureMap
 from .kernel import quantum_kernel
 from .classical_kernels import (
@@ -11,6 +11,7 @@ from .classical_kernels import (
 from .mps_kernel import MPSBypass, MPSLayer
 from .message_passing import message_passing
 from .qcc_block import QCCBlock
+from .spectrum import SpectrumFeature
 
 __all__ = [
     "EntanglingFeatureMap",
@@ -24,4 +25,5 @@ __all__ = [
     "MPSLayer",
     "message_passing",
     "QCCBlock",
+    "SpectrumFeature",
 ]
