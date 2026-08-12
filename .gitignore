@@ -73,3 +73,4 @@ s_mamba_official/
 # 数据集与虚拟环境
 datasets/
 .venv/
+archive_old/

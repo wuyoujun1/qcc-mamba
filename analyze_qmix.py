@@ -104,7 +104,9 @@ def main():
     ap.add_argument("--sensitivity-only", action="store_true")
     args = ap.parse_args()
 
-    for v in ["qmix_soft", "qmix_head", "qmix_full", "qmix", "qmix_sin", "plain"]:
+    # 变体单一事实来源：与 run_qmix.py 同步
+    from run_qmix import VARIANTS as RUN_VARIANTS
+    for v in RUN_VARIANTS:
         cp = f"configs/qmix/qm_{v}_{args.ds}_{args.L}_{args.seed}.yaml"
         ck = f"results/qmix/qm_{v}_{args.ds}_{args.L}_{args.seed}_best.pt"
         if not (os.path.exists(cp) and os.path.exists(ck)):
