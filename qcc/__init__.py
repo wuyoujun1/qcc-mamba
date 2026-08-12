@@ -1,4 +1,7 @@
-"""量子核 QCC 旁路模块：feature map / kernel / classical kernel / message passing / block / spectrum。"""
+"""量子核模块：feature map / kernel / classical kernel / message passing / quantum mix / spectrum。
+
+2026-08-11 重构：QCCBlock（旁路修正）已删除，由 QuantumMixLayer（主干内量子混合）替代。
+"""
 from .feature_map import EntanglingFeatureMap
 from .kernel import quantum_kernel
 from .classical_kernels import (
@@ -8,9 +11,8 @@ from .classical_kernels import (
     no_bypass,
     make_kernel,
 )
-from .mps_kernel import MPSBypass, MPSLayer
 from .message_passing import message_passing
-from .qcc_block import QCCBlock
+from .quantum_mix import QuantumMixLayer
 from .spectrum import SpectrumFeature
 
 __all__ = [
@@ -21,9 +23,7 @@ __all__ = [
     "rff_kernel",
     "no_bypass",
     "make_kernel",
-    "MPSBypass",
-    "MPSLayer",
     "message_passing",
-    "QCCBlock",
+    "QuantumMixLayer",
     "SpectrumFeature",
 ]

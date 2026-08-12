@@ -34,8 +34,8 @@ DATASET_FILES = {
     "weather": "weather.csv",
     "exchange": "exchange_rate.csv",
     "solar": "solar.csv",
-    # 新增数据集
-    "chinaaqi": "chinaaqi.csv",
+    # 新增数据集（build 脚本产出带下划线文件名）
+    "chinaaqi": "china_aqi.csv",
     "metr_la": "metr_la.csv",
     "pems_bay": "pems_bay.csv",
     "ili": "national_illness.csv",

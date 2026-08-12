@@ -50,6 +50,9 @@ class SMambaBackbone(BaseBackbone):
         activation: str = "gelu",
         use_norm: bool = False,
         classify_strategy: str | None = None,
+        quantum_mix_layers: nn.ModuleList | None = None,
+        spectrum_inject: nn.Module | None = None,
+        head_qmix: nn.Module | None = None,
     ):
         super().__init__()
         self.num_var = num_var
@@ -82,9 +85,17 @@ class SMambaBackbone(BaseBackbone):
         )
 
         # 预测头：(B, V, d_model) → (B, V, horizon) → (B, horizon, V)
-        self.pred_head = nn.Linear(d_model, horizon, bias=True)
+        # 方案 1（2026-08-11 晚）：head_qmix 时拼接量子聚合特征，输入维度 2d
+        self.head_qmix = head_qmix
+        head_in_dim = d_model * (2 if head_qmix is not None else 1)
+        self.pred_head = nn.Linear(head_in_dim, horizon, bias=True)
 
-    def forward(self, x: torch.Tensor) -> BackboneOutput:
+        # 量子混合（可选，2026-08-11 重构）：每层 Mamba 后插一层 QuantumMixLayer
+        self.quantum_mix_layers = quantum_mix_layers
+        # 频谱注入（可选）：S (B, V, 2M) → (B, V, d_model)，加到 embedding 输出
+        self.spectrum_inject = spectrum_inject
+
+    def forward(self, x: torch.Tensor, S: torch.Tensor | None = None) -> BackboneOutput:
         """x: (B, L, V) → BackboneOutput(H, y_main)
 
         Args:
@@ -92,6 +103,7 @@ class SMambaBackbone(BaseBackbone):
                V_eff = num_var + n_feats。H 会包含 num_var 个变量 token；
                如果 x 额外带了时间特征（如 sin/cos），H 维度会相应放大。
                本函数使用 self.num_var（构造时指定的原始变量数）正确切片。
+            S: 对齐频谱特征 (B, V, 2M)（量子混合层 / 频谱注入需要时提供）。
         """
         B, L, V_eff = x.shape
         V = self.num_var  # 原始变量数（构造时指定）
@@ -105,20 +117,47 @@ class SMambaBackbone(BaseBackbone):
         # Embedding: (B, L, V_eff) → (B, V_eff, d_model)
         enc_out = self.enc_embedding(x)  # (B, V_eff, d_model)
 
-        # Encoder: (B, V_eff, d_model) → (B, V_eff, d_model)
-        enc_out = self.encoder(enc_out, attn_mask=None)
+        # 频谱注入：周期结构进主干第一层（只注入前 V 个变量 token，S 是 (B,V,2M)）
+        if self.spectrum_inject is not None and S is not None:
+            enc_out[:, :V, :] = enc_out[:, :V, :] + self.spectrum_inject(S.float())
+
+        K_last = None
+        if self.quantum_mix_layers is not None and len(self.quantum_mix_layers) > 0:
+            # 量子混合主干：每层 Mamba 后插量子核跨变量混合
+            # 量子混合只作用于 V 个变量 token（fmap 的 S 角度需要与 H 匹配），
+            # 时间特征 token 保持不动，与混合后结果拼接继续下一层 Mamba。
+            layers = self.encoder.attn_layers
+            for i, layer in enumerate(layers):
+                enc_out, _ = layer(enc_out, attn_mask=None)
+                if i < len(self.quantum_mix_layers):
+                    enc_var = enc_out[:, :V, :]
+                    enc_mixed, K = self.quantum_mix_layers[i](enc_var, S)
+                    enc_out = torch.cat([enc_mixed, enc_out[:, V:, :]], dim=1)
+                    K_last = K
+            if self.encoder.norm is not None:
+                enc_out = self.encoder.norm(enc_out)
+        else:
+            enc_out = self.encoder(enc_out, attn_mask=None)
 
         # 取前 V 个变量 token（去掉时间特征 token）
         H = enc_out[:, :V, :]  # (B, V, d_model)
 
-        # 预测头：(B, V, d_model) → (B, H, V)
-        y_main = self.pred_head(H).transpose(1, 2)  # (B, horizon, V)
+        # 方案 1：预测头级量子聚合 —— K 直接在输出端加权别的变量的 token，零稀释
+        if self.head_qmix is not None and S is not None:
+            Hagg, K_head = self.head_qmix(H, S)  # (B, V, d) = LN(softmax(K)·H·W_q)
+            K_last = K_head
+            head_in = torch.cat([H, Hagg], dim=-1)  # (B, V, 2d)
+        else:
+            head_in = H
+
+        # 预测头：(B, V, [2]d) → (B, H, V)
+        y_main = self.pred_head(head_in).transpose(1, 2)  # (B, horizon, V)
 
         if self.use_norm:
             y_main = y_main * (stdev[:, 0, :V].unsqueeze(1).repeat(1, self.horizon, 1))
             y_main = y_main + (means[:, 0, :V].unsqueeze(1).repeat(1, self.horizon, 1))
 
-        return BackboneOutput(H=H, y_main=y_main)
+        return BackboneOutput(H=H, y_main=y_main, K=K_last)
 
 
 __all__ = ["SMambaBackbone"]

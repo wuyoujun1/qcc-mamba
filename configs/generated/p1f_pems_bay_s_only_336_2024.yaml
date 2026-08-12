@@ -1,0 +1,39 @@
+data_dir: ../ts_quantum/datasets
+dataset: pems_bay
+horizon: 336
+lookback: 336
+model:
+  alpha0: 0.1
+  beta: 0.1
+  d_token: 512
+  entangle_topo: linear
+  kernel_fn: quantum
+  n_layers: 2
+  n_qubits: 8
+  revin_affine: true
+  spectrum_M: 32
+  spectrum_amp_normalize: false
+  spectrum_freq_align: true
+  spectrum_range: '0_2'
+  spectrum_time_align: true
+  theta_S_scale0: 0.5
+  use_H: false
+  use_S: true
+  use_fmap: true
+  use_periodic_feat: true
+  use_spectrum: true
+run_name: p1f_pems_bay_s_only_336_2024
+save_dir: /home/wuyoujun/qcc-mamba/results/matrix/p1f_336
+seed: 2024
+train:
+  accumulation_steps: 1
+  batch_size: 32
+  epochs: 50
+  eval_test_every_epoch: false
+  lr: 0.0001
+  num_workers: 4
+  patience: 8
+  proj_weight_decay: 0.0
+  stride: 1
+  use_amp: false
+  weight_decay: 1.0e-05

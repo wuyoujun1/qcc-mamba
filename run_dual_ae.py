@@ -35,6 +35,38 @@ def load_config(config_path):
     return config
 
 
+@torch.no_grad()
+def compute_k_stats(model, loader, device, n_batches=4):
+    """在测试集上采样若干 batch，计算核矩阵 K 的统计量（可解释性素材）。
+
+    返回 {'diag_mean', 'offdiag_mean', 'offdiag_std'}；无旁路时返回 None。
+    """
+    model.eval()
+    diags, offdiags = [], []
+    for i, batch in enumerate(loader):
+        if i >= n_batches:
+            break
+        x, y_true = batch[0], batch[1]
+        x_mark = batch[2].to(device) if len(batch) == 4 else None
+        x = x.to(device)
+        _, _, K = model(x, x_mark=x_mark, return_norm=False)
+        if K is None:
+            return None
+        K = K.float()
+        V = K.shape[-1]
+        diag = torch.diagonal(K, dim1=-2, dim2=-1)  # (B, V)
+        off_sum = K.sum(dim=(-1, -2)) - diag.sum(dim=-1)
+        diags.append(diag.mean().item())
+        offdiags.append((off_sum / (V * (V - 1))).mean().item())
+    if not diags:
+        return None
+    return {
+        "diag_mean": float(np.mean(diags)),
+        "offdiag_mean": float(np.mean(offdiags)),
+        "offdiag_std": float(np.std(offdiags)),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description='DualAE-QCC 运行入口')
     parser.add_argument('--config', type=str, required=True, help='配置文件路径')
@@ -73,6 +105,17 @@ def main():
         num_workers=num_workers,
     )
 
+    # 预热：在 CUDA 初始化前启动 DataLoader worker（persistent_workers 下只 fork 一次）。
+    # 若等 fit() 里第一次迭代才 fork，此时 CUDA 已初始化 + pin_memory 后台线程存活，
+    # 曾有 epoch 边界死锁（main=futex_wait, workers=do_poll, GPU 0%）。提前 fork 彻底规避。
+    if num_workers > 0:
+        print("Warming up DataLoader workers before CUDA init...")
+        for _name, _dl in loaders.items():
+            try:
+                next(iter(_dl))
+            except StopIteration:
+                pass
+
     # P2-2：预计算全局每变量 mean/std（供 evaluate 输出归一化 MSE/MAE）
     # 访问路径：DataLoader.dataset = ECLDataset(.dataset=TimeSeriesDataset(.data))
     inner = getattr(loaders['train'].dataset, 'dataset', None)
@@ -88,19 +131,28 @@ def main():
     # 模型
     model_cfg = config['model']
     print("Building model...")
+    # 数据形状：ECLDataset 包装 TimeSeriesDataset，实际数据在 .dataset.data
+    _train_inner = getattr(loaders['train'].dataset, 'dataset', loaders['train'].dataset)
+    _train_data = getattr(_train_inner, 'data', None)
+    if _train_data is None:
+        raise RuntimeError("无法获取训练数据形状，请检查 dataloader 结构")
     model = QCCMamba(
-        num_var=loaders['train'].dataset.data.shape[1],
+        num_var=_train_data.shape[1],
         lookback=lookback,
         horizon=horizon,
         d_token=model_cfg.get('d_token', 512),
-        n_qubits=model_cfg.get('n_qubits', 10),
+        qmix_layers=model_cfg.get('qmix_layers', 0),
+        qmix_norm=model_cfg.get('qmix_norm', 'avg'),
+        head_agg=model_cfg.get('head_agg', False),
+        spectrum_inject=model_cfg.get('spectrum_inject', False),
+        kernel_T=model_cfg.get('kernel_T', 1.0),
+        topk=model_cfg.get('topk', 0),
+        n_qubits=model_cfg.get('n_qubits', 8),
         n_layers=model_cfg.get('n_layers', 2),
         entangle_topo=model_cfg.get('entangle_topo', 'linear'),
         kernel_fn=model_cfg.get('kernel_fn', 'quantum'),
         use_fmap=model_cfg.get('use_fmap', True),
-        alpha0=model_cfg.get('alpha0', 0.1),
         theta_S_scale0=model_cfg.get('theta_S_scale0', 0.5),
-        beta=model_cfg.get('beta', 0.1),
         use_periodic_feat=model_cfg.get('use_periodic_feat', True),
         revin_affine=model_cfg.get('revin_affine', True),
         use_spectrum=model_cfg.get('use_spectrum', True),
@@ -111,6 +163,9 @@ def main():
         spectrum_freq_align=model_cfg.get('spectrum_freq_align', True),
         use_H=model_cfg.get('use_H', True),
         use_S=model_cfg.get('use_S', True),
+        reupload_source=model_cfg.get('reupload_source', 'S'),
+        angle_norm=model_cfg.get('angle_norm', 'clamp'),
+        angle_radius=model_cfg.get('angle_radius', 1.0),
     )
     model = model.to(device)
     
@@ -137,6 +192,7 @@ def main():
     patience = train_cfg.get('patience', 10)
     use_amp = train_cfg.get('use_amp', False)
     accumulation_steps = train_cfg.get('accumulation_steps', 1)
+    eval_test_every_epoch = train_cfg.get('eval_test_every_epoch', True)
     
     # 保存目录
     save_dir = config.get('save_dir', 'results/dual_default')
@@ -157,6 +213,7 @@ def main():
         run_name=run_name,
         use_amp=use_amp,
         accumulation_steps=accumulation_steps,
+        eval_test_every_epoch=eval_test_every_epoch,
     )
     
     # 最终评估
@@ -173,7 +230,18 @@ def main():
     history_path = os.path.join(save_dir, f"{run_name}_history.npy")
     np.save(history_path, history)
     print(f"\nTraining history saved to: {history_path}")
-    
+
+    # 可解释性：K 矩阵统计（对角 ≈ 1，非对角 = 跨变量保真度均值）
+    if getattr(model, 'backbone', None) is not None and getattr(model.backbone, 'quantum_mix_layers', None):
+        try:
+            kstats = compute_k_stats(model, loaders['test'], device)
+            if kstats is not None:
+                print(f"K stats: diag_mean={kstats['diag_mean']:.4f} "
+                      f"offdiag_mean={kstats['offdiag_mean']:.4f} "
+                      f"offdiag_std={kstats['offdiag_std']:.4f}")
+        except Exception as e:
+            print(f"K stats skipped: {e}")
+
     print("\nTraining completed!")
 
 

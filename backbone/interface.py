@@ -19,19 +19,24 @@ import torch.nn as nn
 class BackboneOutput:
     """主干输出。
 
-    H: (B, V, d) — 每个变量的 token 表征（供 QCC 旁路）
+    H: (B, V, d) — 每个变量的 token 表征
     y_main: (B, H_pred, V) — 主预测头输出
+    K: (B, V, V) — 量子核矩阵（最后一个量子混合层，无可选；无则 None）
     """
 
     H: torch.Tensor
     y_main: torch.Tensor
+    K: Optional[torch.Tensor] = None
 
 
 class BaseBackbone(nn.Module):
     """所有 backbone 的抽象接口。"""
 
-    def forward(self, x: torch.Tensor) -> BackboneOutput:
-        """x: (B, L, V) → BackboneOutput(H, y_main)。"""
+    def forward(self, x: torch.Tensor, S: Optional[torch.Tensor] = None) -> BackboneOutput:
+        """x: (B, L, V) → BackboneOutput(H, y_main)。
+
+        S: (B, V, 2M) 对齐频谱特征（量子混合 / 频谱注入需要时提供，无则忽略）。
+        """
         raise NotImplementedError
 
 
@@ -88,9 +93,10 @@ class MockBackbone(BaseBackbone):
         # 主预测头：H (B, V, d_token) -> y_main (B, H, V)
         self.pred_head = nn.Linear(d_token, horizon)
 
-    def forward(self, x: torch.Tensor) -> BackboneOutput:
+    def forward(self, x: torch.Tensor, S: Optional[torch.Tensor] = None) -> BackboneOutput:
         """x: (B, L, V) → BackboneOutput。
 
+        S: 忽略（Mock 不实用频谱）。
         注意：为了与真实 S-Mamba 接口一致，token 维度是 V 优先。
         """
         B, L, V = x.shape

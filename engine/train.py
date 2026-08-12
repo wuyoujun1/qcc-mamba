@@ -202,6 +202,7 @@ def fit(
     initial_epoch: int = 0,
     use_amp: bool = False,
     accumulation_steps: int = 1,
+    eval_test_every_epoch: bool = True,
 ) -> Dict[str, list]:
     """完整训练 + early stopping + checkpoint。
 
@@ -232,7 +233,12 @@ def fit(
             scaler=scaler, accumulation_steps=accumulation_steps
         )
         val_metrics = evaluate(model, loaders["val"], device)
-        test_metrics = evaluate(model, loaders["test"], device)
+        if eval_test_every_epoch:
+            test_metrics = evaluate(model, loaders["test"], device)
+        else:
+            # 提速模式：每 epoch 只评 val（早停依据），test 留到最后统一评估
+            test_metrics = {"mse": float("nan"), "mae": float("nan"),
+                            "mse_norm": float("nan"), "mae_norm": float("nan")}
 
         history["train_loss"].append(train_metrics["loss"])
         history["val_mse"].append(val_metrics["mse"])

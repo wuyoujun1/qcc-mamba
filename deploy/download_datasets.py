@@ -4,9 +4,10 @@
 用法：
     python download_datasets.py --dir ../datasets
 
-支持的 datasets（全部 / 按需选一个或多个）：
-    electricity, etth1, etth2, ettm1, ettm2, traffic, weather, solar, exchange
+支持的 datasets（实验范围 9 个 / 按需选一个或多个）：
+    electricity, etth1, etth2, ettm1, ettm2, traffic, weather, exchange
 
+ILI（城市级，317 变量）不在公开一键范围，需手动放置为 ILI.csv；
 Pecan Street / 多光伏站等需注册的数据集不在此脚本范围内，请手动放置。
 """
 from __future__ import annotations
@@ -63,12 +64,6 @@ DATASETS = {
         "filename": "weather.txt.gz",
         "extract": False,
         "note": "Weather",
-    },
-    "solar": {
-        "url": "https://raw.githubusercontent.com/laiguokun/multivariate-time-series-data/master/solar_AL/solar.txt.gz",
-        "filename": "solar.txt.gz",
-        "extract": False,
-        "note": "Solar-Energy",
     },
     "exchange": {
         "url": "https://raw.githubusercontent.com/laiguokun/multivariate-time-series-data/master/exchange_rate/exchange_rate.txt.gz",

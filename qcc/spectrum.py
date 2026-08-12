@@ -284,6 +284,10 @@ class SpectrumFeature(nn.Module):
         B, V, F = values.shape
         device = values.device
 
+        # 兼容无频率对齐时的 1-D 频率坐标（freq_bins），广播到 (B, V, F)
+        if freq_tilde.dim() == 1:
+            freq_tilde = freq_tilde.unsqueeze(0).unsqueeze(0).expand(B, V, F)
+
         # 使用传入的参数或默认值
         if range_start is None:
             range_start = self.range_start
@@ -302,12 +306,12 @@ class SpectrumFeature(nn.Module):
         values_sorted = torch.gather(values, dim=-1, index=sorted_idx)  # (B, V, F)
 
         # 对每个目标采样点，找到左右邻居并插值
-        # target_grid: (M,) → (1, 1, M)
-        target = target_grid.unsqueeze(0).unsqueeze(0)  # (1, 1, M)
+        # searchsorted 要求 target 前 N-1 维与 boundaries 匹配，广播到 (B, V, M)
+        target = target_grid.view(1, 1, self.M).expand(B, V, self.M)  # (B, V, M)
 
         # 找到每个 target 在 freq_sorted 中的位置（左侧索引）
         # searchsorted 要求 freq_sorted 单调递增
-        # freq_sorted: (B, V, F), target: (1, 1, M)
+        # freq_sorted: (B, V, F), target: (B, V, M)
         # 输出: (B, V, M) 左侧索引
         left_idx = torch.searchsorted(freq_sorted, target, right=False) - 1
         left_idx = left_idx.clamp(min=0, max=F - 2)  # 防止越界

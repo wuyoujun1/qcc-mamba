@@ -61,6 +61,11 @@ class EntanglingFeatureMap(nn.Module):
         - use_H=True, use_S=False → 仅H（= 旧 QCC 但 d=512, N=10）
         - use_H=False, use_S=True → 仅S
 
+    reupload_source 消融（重上传层用什么角度）：
+        - 'S'（默认）→ 重上传用 S 角度（双阶段主线）
+        - 'H' → 重上传也用 H 角度（"S 调制"净贡献）
+        - 'alternate' → 重上传层 H/S 交替（调制方式敏感性）
+
     Args:
         n_qubits: N 量子比特数，特征空间维度 2^N。默认 10。
         n_layers: D 数据重上传层数。默认 2。
@@ -69,9 +74,15 @@ class EntanglingFeatureMap(nn.Module):
         entangle_topo: 纠缠拓扑 "linear" / "ring" / "none"。
         use_H: 首层是否用 H 编码（默认 True）。
         use_S: 重上传是否用 S 编码（默认 True）。
+        reupload_source: 重上传层角度来源 'S' / 'H' / 'alternate'（默认 'S'）。
+        angle_norm: 角度归一化方式。"clamp"（默认）= 原版 clamp(±π)（保留原行为）；
+            "sphere" = 球面归一化（proj 先除 L2 范数再乘 angle_radius）。
+        angle_radius: 球面归一化半径（仅 angle_norm="sphere" 时生效）。默认 1.0。
     """
 
     SUPPORTED_TOPO = ("linear", "ring", "none")
+    SUPPORTED_REUPLOAD = ("S", "H", "alternate")
+    SUPPORTED_ANGLE_NORM = ("clamp", "sphere")
 
     def __init__(
         self,
@@ -82,6 +93,9 @@ class EntanglingFeatureMap(nn.Module):
         entangle_topo: str = "linear",
         use_H: bool = True,
         use_S: bool = True,
+        reupload_source: str = "S",
+        angle_norm: str = "clamp",
+        angle_radius: float = 1.0,
     ):
         super().__init__()
         if entangle_topo not in self.SUPPORTED_TOPO:
@@ -90,6 +104,12 @@ class EntanglingFeatureMap(nn.Module):
             raise ValueError(f"n_qubits must be in [2, 14] for QKCS memory, got {n_qubits}")
         if not use_H and not use_S:
             raise ValueError("At least one of use_H or use_S must be True")
+        if reupload_source not in self.SUPPORTED_REUPLOAD:
+            raise ValueError(f"reupload_source must be one of {self.SUPPORTED_REUPLOAD}, got {reupload_source}")
+        if angle_norm not in self.SUPPORTED_ANGLE_NORM:
+            raise ValueError(f"angle_norm must be one of {self.SUPPORTED_ANGLE_NORM}, got {angle_norm}")
+        if angle_radius <= 0:
+            raise ValueError(f"angle_radius must be > 0, got {angle_radius}")
 
         self.N = n_qubits
         self.D = n_layers
@@ -99,6 +119,9 @@ class EntanglingFeatureMap(nn.Module):
         self.dim = 1 << n_qubits
         self.use_H = use_H
         self.use_S = use_S
+        self.reupload_source = reupload_source
+        self.angle_norm = angle_norm
+        self.angle_radius = angle_radius
 
         # 每 qubit 2 角度（RZ·RY 完整 Bloch 球）
         self.angles_per_qubit = 2
@@ -224,23 +247,31 @@ class EntanglingFeatureMap(nn.Module):
     # 角度计算
     # ------------------------------------------------------------------ #
     def _compute_H_angles(self, h: torch.Tensor) -> torch.Tensor:
-        """H → 角度：proj_H + clamp + reshape。
+        """H → 角度：proj_H + （clamp 或 球面归一化 × 半径）+ reshape。
 
         h: (B, V, d_token) → (B, V, N, 2)
         """
         B, V, _ = h.shape
         h_proj = self.proj_H(h)  # (B, V, 2N)
-        h_proj = torch.clamp(h_proj, -math.pi, math.pi)
+        if self.angle_norm == "sphere":
+            h_proj = h_proj / h_proj.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+            h_proj = h_proj * self.angle_radius
+        else:
+            h_proj = torch.clamp(h_proj, -math.pi, math.pi)
         return h_proj.reshape(B, V, self.N, 2)
 
     def _compute_S_angles(self, s: torch.Tensor) -> torch.Tensor:
-        """S → 角度：proj_S + clamp + reshape。
+        """S → 角度：proj_S + （clamp 或 球面归一化 × 半径）+ reshape。
 
         s: (B, V, 2M) → (B, V, N, 2)
         """
         B, V, _ = s.shape
         s_proj = self.proj_S(s)  # (B, V, 2N)
-        s_proj = torch.clamp(s_proj, -math.pi, math.pi)
+        if self.angle_norm == "sphere":
+            s_proj = s_proj / s_proj.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+            s_proj = s_proj * self.angle_radius
+        else:
+            s_proj = torch.clamp(s_proj, -math.pi, math.pi)
         return s_proj.reshape(B, V, self.N, 2)
 
     # ------------------------------------------------------------------ #
@@ -282,9 +313,16 @@ class EntanglingFeatureMap(nn.Module):
         # 首层：乘积态（用 H 角度），无纠缠
         psi = self._product_state_rz_ry(h_angles)
 
-        # 重上传层（D-1 次，用 S 角度）：先旋转后纠缠
-        for _ in range(1, self.D):
-            psi = self._apply_rot_layer(psi, s_angles)
+        # 重上传层（D-1 次）：先旋转后纠缠
+        # reupload_source 控制重上传层角度来源（use_S=False 时 s_angles==h_angles，等价重上传 H）
+        for l in range(1, self.D):
+            if self.reupload_source == "alternate":
+                layer_angles = s_angles if (l % 2 == 1) else h_angles
+            elif self.reupload_source == "H":
+                layer_angles = h_angles
+            else:  # "S"（主线）
+                layer_angles = s_angles
+            psi = self._apply_rot_layer(psi, layer_angles)
             if self.entangle_topo != "none":
                 psi = psi.index_select(-1, self.ent_perm)
 

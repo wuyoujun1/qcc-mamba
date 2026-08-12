@@ -66,3 +66,10 @@ wandb/
 
 # Cloned S-Mamba official repo (for reference only, not part of deploy)
 s_mamba_official/
+
+# 训练产物(39G, 不入库)
+*.pt
+*.npy
+# 数据集与虚拟环境
+datasets/
+.venv/

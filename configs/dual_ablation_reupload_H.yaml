@@ -1,0 +1,56 @@
+# DualAE-QCC 消融实验: 重上传用 H 角度（S 调制净贡献）
+# 与 phase1 唯一区别：重上传层角度来源 S → H（频谱不参与调制）
+# 预期：比 phase1 差（S 调制被去掉）
+
+# 数据集
+dataset: electricity
+data_dir: ../ts_quantum/datasets
+lookback: 96
+horizon: 96
+
+# 模型架构
+model:
+  d_token: 512
+  n_qubits: 10
+  n_layers: 2
+  entangle_topo: linear
+  kernel_fn: quantum
+  use_fmap: true
+  alpha0: 0.1
+  theta_S_scale0: 0.5
+  beta: 0.1
+  use_periodic_feat: true
+  revin_affine: true
+
+  # 频谱模块（开启，S 仍计算但重上传不用）
+  use_spectrum: true
+  spectrum_M: 32
+  spectrum_range: "0_2"
+  spectrum_amp_normalize: false
+  spectrum_time_align: true
+  spectrum_freq_align: true
+
+  # 消融开关：双阶段结构，但重上传用 H
+  use_H: true
+  use_S: true
+  reupload_source: "H"
+
+# 训练
+train:
+  batch_size: 32
+  epochs: 100
+  patience: 10
+  lr: 0.0001
+  weight_decay: 0.00001
+  proj_weight_decay: 0.0
+  use_amp: true
+  accumulation_steps: 1
+  stride: 1
+  num_workers: 4
+
+# 保存
+save_dir: results/dual_ablation_reupload_H
+run_name: dual_reupload_H
+
+# 随机种子
+seed: 42

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from qcc.spectrum import SpectrumFeature
 from qcc.feature_map import EntanglingFeatureMap
-from qcc.qcc_block import QCCBlock
+from qcc.quantum_mix import QuantumMixLayer
 from model.qcc_mamba import QCCMamba
 from backbone.interface import MockBackbone
 
@@ -87,31 +87,28 @@ def test_feature_map():
 
 
 def test_qcc_block():
-    """测试 QCC 旁路块。"""
+    """测试量子混合层（QuantumMixLayer，2026-08-11 重构替代 QCCBlock）。"""
     print("=" * 60)
-    print("Test 3: QCC Block")
+    print("Test 3: Quantum Mix Layer")
     print("=" * 60)
-    
+
     B, V, d_token = 2, 10, 512
-    H_pred = 96
     N = 10
     M = 32
-    
-    qcc = QCCBlock(d_token=d_token, horizon=H_pred, n_qubits=N, M=M)
-    
+
+    qmix = QuantumMixLayer(d_token=d_token, n_qubits=N, M=M)
+
     H = torch.randn(B, V, d_token)
-    y_main = torch.randn(B, H_pred, V)
     S = torch.randn(B, V, 2*M)
-    
-    y, K, correction = qcc(H, y_main, S)
-    
-    print(f"Input: H = {H.shape}, y_main = {y_main.shape}, S = {S.shape}")
-    print(f"Output: y = {y.shape}, K = {K.shape}, correction = {correction.shape}")
-    print(f"Expected: y = ({B}, {H_pred}, {V}), K = ({B}, {V}, {V})")
-    
-    assert y.shape == (B, H_pred, V), f"Expected y shape {(B, H_pred, V)}, got {y.shape}"
+
+    Hp, K = qmix(H, S)
+
+    print(f"Input: H = {H.shape}, S = {S.shape}")
+    print(f"Output: Hp = {Hp.shape}, K = {K.shape}")
+    print(f"Expected: Hp = ({B}, {V}, {d_token}), K = ({B}, {V}, {V})")
+
+    assert Hp.shape == (B, V, d_token), f"Expected Hp shape {(B, V, d_token)}, got {Hp.shape}"
     assert K.shape == (B, V, V), f"Expected K shape {(B, V, V)}, got {K.shape}"
-    assert correction.shape == (B, H_pred, V), f"Expected correction shape {(B, H_pred, V)}, got {correction.shape}"
     
     # 检查 K 矩阵对角线
     diag = torch.diagonal(K, dim1=-2, dim2=-1)
@@ -122,7 +119,7 @@ def test_qcc_block():
     assert torch.allclose(K, K.transpose(-1, -2), atol=1e-5), "K should be symmetric"
     
     # 检查 γ 参数
-    gamma = qcc.gamma
+    gamma = qmix.gamma
     print(f"γ (theta_S_scale): {gamma.item():.4f}")
     assert 0.1 <= gamma.item() <= 2.0, f"γ should be in [0.1, 2.0], got {gamma.item()}"
     
@@ -145,6 +142,12 @@ def test_full_model():
     N = 10
     M = 32
     
+    if not torch.cuda.is_available():
+        print("⚠ Mamba 核仅支持 CUDA，跳过 Test 4（量子混合主干）")
+        print()
+        return
+
+    device = "cuda"
     model = QCCMamba(
         num_var=V,
         lookback=L,
@@ -152,34 +155,34 @@ def test_full_model():
         d_token=d_token,
         n_qubits=N,
         spectrum_M=M,
+        qmix_layers=1,  # 量子混合进主干（默认 SMambaBackbone，需 GPU）
         use_spectrum=True,
         use_H=True,
         use_S=True,
-        backbone=MockBackbone(
-            num_var=V, lookback=L, horizon=H_pred, d_model=d_token, d_token=d_token,
-        ),
-    )
-    
-    x = torch.randn(B, L, V)
-    
+    ).to(device)
+
+    x = torch.randn(B, L, V, device=device)
+
     y, y_main, K = model(x)
-    
+
     print(f"Input: x = {x.shape}")
     print(f"Output: y = {y.shape}, y_main = {y_main.shape}, K = {K.shape}")
     print(f"Expected: y = ({B}, {H_pred}, {V})")
-    
+
     assert y.shape == (B, H_pred, V), f"Expected y shape {(B, H_pred, V)}, got {y.shape}"
     assert y_main.shape == (B, H_pred, V), f"Expected y_main shape {(B, H_pred, V)}, got {y_main.shape}"
     assert K.shape == (B, V, V), f"Expected K shape {(B, V, V)}, got {K.shape}"
-    
+
     # 检查梯度流
     loss = y.pow(2).mean()
     loss.backward()
-    
-    # 检查关键参数是否有梯度
+
+    # 检查关键参数是否有梯度（量子路径端到端可训练）
     assert model.spectrum is not None, "Spectrum module should exist"
-    assert model.qcc.fmap.proj_H.weight.grad is not None, "proj_H should have gradient"
-    assert model.qcc.fmap.proj_S.weight.grad is not None, "proj_S should have gradient"
+    assert model.backbone.quantum_mix_layers is not None, "qmix layers should exist"
+    qmix0 = model.backbone.quantum_mix_layers[0]
+    assert qmix0.fmap.proj_H.weight.grad is not None, "proj_H should have gradient"
+    assert qmix0.fmap.proj_S.weight.grad is not None, "proj_S should have gradient"
     
     print("✓ Full model output dimensions correct")
     print("✓ Gradient flows correctly")

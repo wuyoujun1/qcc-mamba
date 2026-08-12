@@ -384,6 +384,14 @@ def build_dataloader(
     num_workers: int = 0,
     drop_last: bool = False,
 ) -> DataLoader:
+    """构造 DataLoader。
+
+    persistent_workers=(num_workers > 0)：修复 GPU 训练下的 epoch 边界死锁。
+    旧配置 pin_memory=True + num_workers>0 + persistent_workers=False 时，worker
+    在每个 epoch 边界被重新 fork（此时 CUDA 已初始化 + pin_memory 后台线程存活），
+    实测在 epoch 8 处死锁（main=futex_wait，workers=do_poll 空等，GPU 0%）。
+    persistent_workers=True 使 worker 只 fork 一次并跨 epoch 复用，不再每 epoch 重fork。
+    """
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -391,6 +399,7 @@ def build_dataloader(
         num_workers=num_workers,
         drop_last=drop_last,
         pin_memory=True,
+        persistent_workers=(num_workers > 0),
     )
 
 
