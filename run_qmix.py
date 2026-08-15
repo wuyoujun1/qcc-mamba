@@ -90,11 +90,11 @@ seed: {seed}
 train:
   accumulation_steps: 1
   batch_size: 32
-  epochs: 50
+  epochs: {epochs}
   eval_test_every_epoch: false
   lr: 0.0001
   num_workers: 0
-  patience: 8
+  patience: {patience}
   proj_weight_decay: 0.0
   gate_lr: {gate_lr}
   stride: 1
@@ -242,6 +242,27 @@ VARIANTS = {
                     kernel_T=0.1, offdiag=True, n_qubits=2),  # y_qk 学残差
     "qk2_h":   dict(qmix_layers=0, qk_path=True, qk_gate_init=0.5, qk_use_H=True,
                     kernel_T=0.1, offdiag=True, n_qubits=2),  # K 读 H+S（随表征演化）
+    # vd 组合（2026-08-15）：vd 在 el 96/192/336 全赢（时滞抓滞后结构），720 还输。
+    # 720 攻档组合：强度/选择性/态空间 三个维度各一试
+    "qoff_n2_vd_s":   dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                           gate=False, hp_scale=0.2, angle_norm="clamp", n_qubits=2,
+                           delay_in_s=True),  # vd + 强度 0.2（720 上 δ̂ 结构更强信号）
+    "qoff_n2_vd_tk":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                           topk=2, gate=False, hp_scale_v=True, angle_norm="clamp",
+                           n_qubits=2, delay_in_s=True),  # vd + topk=2（K 有结构后选择才有意义）
+    "qoff_n2_vd_t05": dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.05, offdiag=True,
+                           gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2,
+                           delay_in_s=True),  # vd + 更低温度（选择性放大）
+    "qoff_n2_vd_n3":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                           gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=3,
+                           delay_in_s=True),  # vd + n3 态空间（8维，容量+时滞）
+    # 720 攻档（2026-08-15）：vd 720 只训 13 epoch（plain 19）提前过拟合 → 训练配置调整
+    "qoff_n2_vd_p12": dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                           gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2,
+                           delay_in_s=True, patience=12),  # patience 8→12
+    "qoff_n2_vd_ep80": dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                            gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2,
+                            delay_in_s=True, patience=15, epochs=80),  # patience 15 + 上限 80
     # 基准（plain 永不变）
     "plain":       dict(qmix_layers=0, qmix_norm="avg", head_agg=False, spectrum_inject=False,
                         kernel_T=1.0, topk=0, offdiag=False, angle_norm="clamp",
@@ -297,6 +318,8 @@ def make_yaml(ds, L, seed, variant):
         qk_gate_init=flags.get("qk_gate_init", 0.05),
         qk_use_H="true" if flags.get("qk_use_H", False) else "false",
         qk_norm=flags.get("qk_norm", "softmax"),
+        patience=flags.get("patience", 8),
+        epochs=flags.get("epochs", 50),
     )
     with open(yaml_path, "w") as f:
         f.write(text)
