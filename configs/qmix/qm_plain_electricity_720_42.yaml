@@ -14,11 +14,25 @@ model:
   gate: false
   gate_init: 0.0
   hp_scale: 1.0
+  delay_in_s: false
   aux_loss: false
   aux_beta: 0.1
   kernel_sup: 0.0
   init_ckpt: 
   n_qubits: 8
+  # P2-1 双路径（2026-08-15）：时间 SSM 单向 + 量子核独占跨变量
+  dual_path: false
+  dp_time_layers: 2
+  dp_time_dim: 256
+  dp_time_pool: mean
+  dp_var_embed: true
+  dp_msg: S
+  dp_fusion: add
+  # QK-Path（量子核独立预测通道）
+  qk_path: false
+  qk_gate_init: 0.05
+  qk_use_H: false
+  qk_norm: softmax
   d_token: 512
   entangle_topo: linear
   kernel_fn: quantum
