@@ -265,8 +265,9 @@ def main():
     # 可解释性：K 矩阵统计（对角 ≈ 1，非对角 = 跨变量保真度均值）
     _backbone = getattr(model, 'backbone', None)
     _has_k = (getattr(_backbone, 'quantum_mix_layers', None)
-              or getattr(_backbone, 'var_path', None))  # P2-1 双路径变量路径也有 K
-    if _backbone is not None and _has_k:
+              or getattr(_backbone, 'var_path', None)   # P2-1 双路径变量路径也有 K
+              or getattr(model, 'qk_mix', None))        # QK-Path 独立预测通道也有 K
+    if _has_k:
         try:
             kstats = compute_k_stats(model, loaders['test'], device)
             if kstats is not None:

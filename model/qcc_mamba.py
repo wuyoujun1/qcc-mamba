@@ -371,6 +371,8 @@ class QCCMamba(nn.Module):
             g = self._qk_gate_raw.clamp(0.0, 2.0)
             y_norm = y_norm + g * y_qk
             K = K_qk  # 核统计/K 监督用 qk 的 K
+            # aux_loss 复用：y_qk 有显式残差目标（主干补不了的部分）
+            self._last_qmix_out = Hagg
 
         self._last_K = K                     # (B, V, V) 或 None（核监督用）
         self._last_x_norm = x_norm           # (B, L, V)（核监督目标用）

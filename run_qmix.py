@@ -229,6 +229,19 @@ VARIANTS = {
                     offdiag=True, n_qubits=2, gate_lr=0.01),  # rbf（el 诊断有选择性）
     "qk_dir":  dict(qmix_layers=0, qk_path=True, kernel_fn="linear_imag", qk_norm="l1",
                     n_qubits=2, gate_lr=0.01),  # 有向核（无浓度问题）
+    # qk2（2026-08-15 诊断后）：γ 退火到 0（gate_lr=0.01 让它快速坍缩，量子路径被关闭）。
+    # 修：gate_init=0.5 开着头学 + 去掉 gate_lr；aux_loss 给 y_qk 显式残差目标
+    "qk2":     dict(qmix_layers=0, qk_path=True, qk_gate_init=0.5,
+                    kernel_T=0.1, offdiag=True, n_qubits=2),  # 保真度核
+    "qk2_rbf": dict(qmix_layers=0, qk_path=True, qk_gate_init=0.5,
+                    kernel_fn="rbf", kernel_T=0.1, offdiag=True, n_qubits=2),
+    "qk2_dir": dict(qmix_layers=0, qk_path=True, qk_gate_init=0.5,
+                    kernel_fn="linear_imag", qk_norm="l1", n_qubits=2),
+    "qk2_aux": dict(qmix_layers=0, qk_path=True, qk_gate_init=0.5,
+                    aux_loss=True, aux_beta=0.1,
+                    kernel_T=0.1, offdiag=True, n_qubits=2),  # y_qk 学残差
+    "qk2_h":   dict(qmix_layers=0, qk_path=True, qk_gate_init=0.5, qk_use_H=True,
+                    kernel_T=0.1, offdiag=True, n_qubits=2),  # K 读 H+S（随表征演化）
     # 基准（plain 永不变）
     "plain":       dict(qmix_layers=0, qmix_norm="avg", head_agg=False, spectrum_inject=False,
                         kernel_T=1.0, topk=0, offdiag=False, angle_norm="clamp",
