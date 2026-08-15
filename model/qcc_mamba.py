@@ -255,6 +255,7 @@ class QCCMamba(nn.Module):
                 angle_norm=angle_norm,
                 angle_radius=angle_radius,
                 delay_in_s=delay_in_s,
+                use_H=use_H,
             )
         elif backbone is None:
             backbone = SMambaBackbone(

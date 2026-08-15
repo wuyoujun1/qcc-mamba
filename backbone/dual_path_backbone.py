@@ -101,6 +101,7 @@ class VarPath(nn.Module):
         angle_norm: str = "clamp",
         angle_radius: float = 1.0,
         delay_in_s: bool = False,
+        use_H: bool = True,
     ):
         super().__init__()
         s_dim = 2 * M + (1 if delay_in_s else 0)
@@ -115,7 +116,11 @@ class VarPath(nn.Module):
             use_fmap=True,
             theta_S_scale0=theta_S_scale0,
             pre_norm=True,
-            use_H=False,  # K 纯由 S 驱动（首层零角度）
+            # V1 诊断（etth1:96）：K 纯 S 驱动（use_H=False）消息=S 有害（dp 0.7084）、
+            # 消息=H_time 有益（dp_hmsg 0.6572）——K 的赢面来自 H 语义而非 S 谱形。
+            # V2：恢复 H 驱动 K（fmap 双阶段：首层 H 角度 + 重上传 S 角度），
+            # K 随表征演化（quantum_mix 设计意图），消息仍由 forward 的 msg 决定。
+            use_H=use_H,
             use_S=True,
             reupload_source="S",
             angle_norm=angle_norm,
@@ -185,6 +190,7 @@ class DualPathBackbone(BaseBackbone):
         angle_norm: str = "clamp",
         angle_radius: float = 1.0,
         delay_in_s: bool = False,
+        use_H: bool = True,
     ):
         super().__init__()
         self.num_var = num_var
@@ -221,6 +227,7 @@ class DualPathBackbone(BaseBackbone):
                 angle_norm=angle_norm,
                 angle_radius=angle_radius,
                 delay_in_s=delay_in_s,
+                use_H=use_H,  # V2: 恢复 H 驱动 K（K 读 H_time + S，随表征演化）
             )
             if self.gate:
                 # 名字含 gate_raw → build_optimizer 自动放入门控组（gate_lr 生效）

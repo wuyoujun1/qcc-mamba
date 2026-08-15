@@ -21,9 +21,12 @@ def rbf_kernel(H: torch.Tensor, gamma: Optional[float] = None) -> torch.Tensor:
     """RBF 核：K[i,j] = exp(-γ ||h_i - h_j||²)。
 
     Args:
-        H: (B, V, d) 浮点张量。
+        H: (B, V, d) 浮点张量；复数（量子态）时拼接 [Re; Im] 后算距离。
         gamma: 带宽倒数。默认 1/d。
     """
+    if H.is_complex():
+        # cdist 不支持复数：实部虚部拼接（欧氏距离等价于复空间距离）
+        H = torch.cat([H.real, H.imag], dim=-1)
     if gamma is None:
         gamma = 1.0 / H.shape[-1]
     # cdist 输出 (B, V, V)

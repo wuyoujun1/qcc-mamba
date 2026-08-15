@@ -189,6 +189,33 @@ VARIANTS = {
     "dp_d":     dict(qmix_layers=0, dual_path=True, dp_fusion="add",
                      gate=True, gate_init=0.05, gate_lr=0.01,
                      kernel_T=0.1, offdiag=True, n_qubits=2, delay_in_s=True),  # +δ̂ 时滞
+    # V2（2026-08-15，etth1:96 诊断后）：恢复 H 驱动 K（use_H 默认 true，
+    # K 读 H_time + S 双阶段，随表征演化）+ 消息 = H_time（dp_msg="H"）。
+    # V1 发现：K 纯 S 驱动消息=S 有害（dp 0.7084）、消息=H_time 有益（dp_hmsg 0.6572）
+    "dp2":      dict(qmix_layers=0, dual_path=True, dp_fusion="add", dp_msg="H",
+                     gate=True, gate_init=0.05, gate_lr=0.01,
+                     kernel_T=0.1, offdiag=True, n_qubits=2),  # 主线：H 驱动 K + H 消息
+    "dp2_ng":   dict(qmix_layers=0, dual_path=True, dp_fusion="add", dp_msg="H",
+                     gate=False, kernel_T=0.1, offdiag=True, n_qubits=2),  # 无门控
+    "dp2_con":  dict(qmix_layers=0, dual_path=True, dp_fusion="concat", dp_msg="H",
+                     kernel_T=0.1, offdiag=True, n_qubits=2),  # concat 消融
+    "dp2_both": dict(qmix_layers=0, dual_path=True, dp_fusion="add", dp_msg="both",
+                     gate=True, gate_init=0.05, gate_lr=0.01,
+                     kernel_T=0.1, offdiag=True, n_qubits=2),  # 消息 = S_emb + H_time
+    "dp2_d":    dict(qmix_layers=0, dual_path=True, dp_fusion="add", dp_msg="H",
+                     gate=True, gate_init=0.05, gate_lr=0.01,
+                     kernel_T=0.1, offdiag=True, n_qubits=2, delay_in_s=True),  # +δ̂
+    # el 根因诊断（2026-08-15）：K 均匀（offdiag_std=0.009≈噪声级）——321 变量在
+    # n2 4维态空间互相淹没（浓度定理另一面）。三个对照区分"态空间容量 vs 数据无差异"：
+    "qoff_n3_v":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                       gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=3),  # 8维态空间
+    "qoff_n4_v":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                       gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=4),  # 16维
+    "qoff_n2_rbf": dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2,
+                        kernel_fn="rbf"),  # 同机制换经典核（数据无差异则 rbf 也均匀）
+    "qoff_n2_dir": dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2),  # 有向核无浓度问题
     # 基准（plain 永不变）
     "plain":       dict(qmix_layers=0, qmix_norm="avg", head_agg=False, spectrum_inject=False,
                         kernel_T=1.0, topk=0, offdiag=False, angle_norm="clamp",
