@@ -94,6 +94,16 @@ PYTHONPATH=. python run_dual_ae.py --config configs/dual_ablation_no_align.yaml 
 - `training.use_amp`: 是否使用混合精度训练
 - `training.accumulation_steps`: 梯度累积步数
 
+### 4.4 量子混合主干实验（2026-08 起主线）
+
+```bash
+# 变体矩阵（qdir/qoff 家族 23 个变体 × 数据集 × 4 档，变体列表见 run_qmix.py VARIANTS）
+PYTHONPATH=. python run_qmix.py --variant qoff_n2_v --dataset etth1 --lookback 96 --horizon 42 --seed 42
+
+# 结果汇总（读 logs/qmix/，打印全变体矩阵）
+PYTHONPATH=. python summarize_qmix.py
+```
+
 ---
 
 ## 5. 关键代码入口
@@ -130,6 +140,20 @@ PYTHONPATH=. python run_dual_ae.py --config configs/dual_ablation_no_align.yaml 
 | ILI | 317 | 周 | 7:1:2 |
 
 数据集默认从 `qcc_mamba/../ts_quantum/datasets/` 读取，CSV 格式（第一列时间戳）。
+
+### 6.1 数据集下载（不入库）
+
+```bash
+mkdir -p ~/ts_quantum/datasets && cd ~/ts_quantum/datasets
+```
+
+| 数据集 | 来源 | 文件名 |
+|--------|------|--------|
+| ETTh1/h2, ETTm1/m2, Weather, Electricity, Traffic, Exchange, ILI | [TSLib 官方 dataset 目录](https://github.com/thuml/Time-Series-Library)（README 内 Google Drive 链接） | ETTh1.csv 等（列=变量，行=时间戳） |
+| METR_LA / PEMS_BAY | TSLib 同目录 .h5 → 用 `data/dataset.py::load_h5_to_csv()` 转换 | metr_la.csv / pems_bay.csv |
+| ChinaAQI | TSLib 数据集链接（部分仓库拆分提供） | china_aqi.csv |
+
+> 服务器现有 `_archive/` 为旧格式备份，不用管。详细实验记录见 [`EXPERIMENT_MAINLINE_20260815.md`](./EXPERIMENT_MAINLINE_20260815.md)。
 
 ---
 

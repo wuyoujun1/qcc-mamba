@@ -322,6 +322,7 @@ def build_optimizer(
     lr: float = 1e-4,
     weight_decay: float = 1e-5,
     proj_weight_decay: Optional[float] = None,
+    gate_lr: Optional[float] = None,
 ) -> torch.optim.Optimizer:
     """构建优化器（支持投影层权重衰减豁免）。
 
@@ -331,6 +332,9 @@ def build_optimizer(
         weight_decay: 默认权重衰减。
         proj_weight_decay: 投影层权重衰减（None = 使用默认，0 = 豁免）。
             建议对 proj_H / proj_S / proj / W_q 等投影层使用较小的权重衰减。
+        gate_lr: 混合门控 γ 的学习率（None = 与 lr 相同）。γ 的梯度很弱
+            （实测 50 epoch 只从 1.0 动到 0.93），给 100 倍 lr 才能按 cell 自适应
+            （etth1 保持全开、weather 关到 ~0.2、electricity 关到 ~0）。
 
     Returns:
         AdamW 优化器。
@@ -339,23 +343,29 @@ def build_optimizer(
         # 不区分，全部用默认 weight_decay
         return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    # 区分投影层和普通参数
+    # 区分投影层、门控层和普通参数
     proj_params = []
+    gate_params = []
     normal_params = []
 
     # 投影层关键词
     proj_keywords = ["proj_H", "proj_S", "proj", "W_q"]
 
     for name, param in model.named_parameters():
-        if any(kw in name for kw in proj_keywords):
+        if "gate_raw" in name:
+            gate_params.append(param)
+        elif any(kw in name for kw in proj_keywords):
             proj_params.append(param)
         else:
             normal_params.append(param)
 
-    return torch.optim.AdamW([
+    groups = [
         {"params": normal_params, "lr": lr, "weight_decay": weight_decay},
         {"params": proj_params, "lr": lr, "weight_decay": proj_weight_decay},
-    ])
+    ]
+    if gate_params:
+        groups.append({"params": gate_params, "lr": gate_lr or lr, "weight_decay": 0.0})
+    return torch.optim.AdamW(groups)
 
 
 __all__ = ["train_one_epoch", "evaluate", "fit", "build_optimizer"]

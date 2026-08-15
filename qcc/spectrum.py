@@ -36,6 +36,7 @@ class SpectrumFeature(nn.Module):
         amp_normalize: bool = False,
         time_align: bool = True,
         freq_align: bool = True,
+        delay_in_s: bool = False,
     ):
         super().__init__()
         self.M = M
@@ -43,6 +44,7 @@ class SpectrumFeature(nn.Module):
         self.amp_normalize = amp_normalize
         self.time_align = time_align
         self.freq_align = freq_align
+        self.delay_in_s = delay_in_s
 
         # 解析采样区间
         if sample_range == "0_2":
@@ -77,9 +79,13 @@ class SpectrumFeature(nn.Module):
         freq_bins = torch.arange(A.shape[-1], device=device).float() / L  # (L//2+1,)
 
         # 2. 时间轴对齐（可选）
+        delta_hat = None
         if self.time_align:
             delta_hat = self._estimate_time_shift(x)  # (B, V)
             phi = self._align_phase(phi, delta_hat, freq_bins)  # (B, V, L//2+1)
+        elif self.delay_in_s:
+            # P0-1（2026-08-14）：时滞入 S——即使不做相位对齐也要算 δ̂ 供 S 通道
+            delta_hat = self._estimate_time_shift(x)
 
         # 3. 频率轴对齐（可选）
         if self.freq_align:
@@ -104,6 +110,11 @@ class SpectrumFeature(nn.Module):
 
         # 6. 拼接 S = [A; φ] ∈ R^{2M}
         S = torch.cat([A_resampled, phi_resampled], dim=-1)  # (B, V, 2M)
+
+        # 7. P0-1（可选）：δ̂ 时滞入 S → [A; φ; δ̂] ∈ R^{2M+1}
+        # 时滞是主干零响应（1e-6）拿不到的独有信息（DeMa 赢的核心）；δ̂ 仍 detach
+        if self.delay_in_s:
+            S = torch.cat([S, delta_hat.unsqueeze(-1)], dim=-1)  # (B, V, 2M+1)
 
         # 全 detach
         return S.detach()

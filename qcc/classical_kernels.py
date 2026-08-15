@@ -121,6 +121,12 @@ def make_kernel(
     if name in ("quantum", "qkcs", "q"):
         from .kernel import quantum_kernel
         return quantum_kernel
+    if name in ("linear_imag", "qdir"):
+        from .kernel import linear_overlap_kernel
+        return lambda psi: linear_overlap_kernel(psi, "imag")
+    if name in ("linear_real", "qreal"):
+        from .kernel import linear_overlap_kernel
+        return lambda psi: linear_overlap_kernel(psi, "real")
     if name == "rbf":
         return rbf_kernel
     if name == "periodic":

@@ -73,6 +73,11 @@ class QuantumMixLayer(nn.Module):
         output_mode: str = "residual",
         kernel_T: float = 1.0,
         topk: int = 0,
+        offdiag: bool = False,
+        gate: bool = False,
+        gate_init: float = 0.0,
+        hp_scale: float = 1.0,
+        delay_in_s: bool = False,
     ):
         """消息传递归一化与输出模式（2026-08-11 晚，运输修复；2026-08-12 选择性修复）。
 
@@ -87,6 +92,15 @@ class QuantumMixLayer(nn.Module):
             softmax(K/T) 且 T<1 可放大 0.004 级差异，恢复 K 的尖峰/选择性。T=1 不生效。
         topk: softmax 后仅保留每行最大的 topk 个耦合并重归一化（0 = 不启用）。
             让 K 明确做"变量选择"，其余变量权重归零。
+        offdiag: 去对角（2026-08-12 根因级修复）：
+            保真度核 diag=1 的性质使 softmax(K/T) 的对角权重随 T 减小趋近 1
+            （T=0.1 时 95.7%，T=0.01 时 99.999%）——消息传递退化为恒等映射，
+            跨变量信息从未进入。offdiag=True 时对 (K-I) 做 softmax，跨变量权重占主导
+            （T=0.1 时对角仅 9.5%）。
+        gate: 混合门控（2026-08-13 轮 C）：输出 H' = H + γ·LN(Hp)，γ 可学习 init=0
+            clamp [0,2]。γ=0 时输出 ≡ 输入（架构数学上等于 plain，结构保证不更差）；
+            仅在 Hp 与损失梯度相关（有真实信号）时 γ 才打开。消除轮 B 的"灾难尾"
+            （变体赢 2-3 个 cell 同时输 6-8 个 cell）。
         """
         super().__init__()
         self.use_fmap = use_fmap
@@ -97,8 +111,11 @@ class QuantumMixLayer(nn.Module):
         self.output_mode = output_mode
         self.kernel_T = kernel_T
         self.topk = topk
-        if norm_type not in ("avg", "softmax"):
-            raise ValueError(f"norm_type must be 'avg' or 'softmax', got {norm_type}")
+        self.offdiag = offdiag
+        self.gate = gate
+        self.hp_scale = hp_scale
+        if norm_type not in ("avg", "softmax", "l1"):
+            raise ValueError(f"norm_type must be 'avg' or 'softmax' or 'l1', got {norm_type}")
         if output_mode not in ("residual", "raw"):
             raise ValueError(f"output_mode must be 'residual' or 'raw', got {output_mode}")
         if kernel_T <= 0:
@@ -134,10 +151,22 @@ class QuantumMixLayer(nn.Module):
         self.W_q = nn.Linear(d_token, d_token, bias=False)
         self.ln = nn.LayerNorm(d_token)
 
+        # 混合门控 γ（可学习标量，init=gate_init（默认 0 → 输出 ≡ 输入），clamp [0, 2]）
+        if gate:
+            self._gate_raw = nn.Parameter(torch.full((), float(gate_init)))
+
         # S 路调制强度 γ（可学习标量，init=0.5, clamp [0.1, 2]）
         if use_S:
             self._gamma_raw = nn.Parameter(torch.tensor(_inv_softplus(theta_S_scale0)))
-            self.s_ln = nn.LayerNorm(2 * M)
+            # P0-1: delay_in_s 时 S 多 1 维 δ̂ 时滞通道
+            self.s_ln = nn.LayerNorm(2 * M + (1 if delay_in_s else 0))
+
+    @property
+    def gate_value(self) -> torch.Tensor:
+        """混合门控强度（γ=0 → H' ≡ H，架构等于 plain）。"""
+        if not self.gate:
+            return torch.tensor(1.0, device=self.W_q.weight.device)
+        return self._gate_raw.clamp(0.0, 2.0)
 
     @property
     def gamma(self) -> torch.Tensor:
@@ -178,19 +207,35 @@ class QuantumMixLayer(nn.Module):
             if self.norm_type == "softmax":
                 # GAT 式行归一化：K[v,:] 和为 1，Hp 幅度 ≈ H，跨变量信号不被 1/V 稀释
                 # kernel_T < 1：放大保真度差异（0.004 级 → 0.04 级），恢复核选择性
-                K_n = torch.softmax(K / self.kernel_T, dim=-1)
+                K_soft = K
+                if self.offdiag:
+                    # 去对角（根因级）：保真度核 diag=1 使 softmax 对角权重趋近 1（恒等映射），
+                    # 只对非对角部分做 softmax，让权重真正分配给其他变量
+                    K_soft = K - torch.eye(K.shape[-1], device=K.device).unsqueeze(0)
+                K_n = torch.softmax(K_soft / self.kernel_T, dim=-1)
                 if self.topk > 0:
                     # 变量选择：仅保留每行 topk 个耦合，其余归零后重归一化
                     kth = torch.topk(K_n, self.topk, dim=-1).values[:, :, -1:]
                     K_n = K_n * (K_n >= kth)
                     K_n = K_n / K_n.sum(-1, keepdim=True).clamp_min(1e-8)
                 Hp = torch.einsum("bvw,bwe->bve", K_n, HW)
+            elif self.norm_type == "l1":
+                # 有符号权重归一化（轮 C 线性核专用）：K 可为负（虚部反对称=有向），
+                # 不用 softmax（会破坏符号），按行 |K| 归一化保留方向
+                K_n = K / K.abs().sum(-1, keepdim=True).clamp_min(1e-8)
+                Hp = torch.einsum("bvw,bwe->bve", K_n, HW)
             else:
                 Hp = torch.einsum("bvw,bwe->bve", K, HW) / K.shape[1]  # (1/V)·K·H·W_q
             if self.output_mode == "raw":
                 # 预测头级聚合：返回 LN(Hp)，供 head 直接拼接放大
                 return self.ln(Hp), K
-            return self.ln(H_in + Hp), K
+            # 暴露 LN(Hp) 供辅助残差损失（qdir_aux）与探针使用
+            self._last_Hp = self.ln(Hp)
+            Hp_g = self.hp_scale * self.ln(Hp)   # 固定缩放（轮 G：防 V 大时强信号发散）
+            if self.gate:
+                # 门控模式（轮 C）：γ=0 → H' ≡ H（结构保证不更差），γ>0 时才注入混合
+                return H + self.gate_value * Hp_g, K
+            return self.ln(H_in + Hp_g), K
 
 
 __all__ = ["QuantumMixLayer"]

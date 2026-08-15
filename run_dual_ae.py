@@ -147,6 +147,13 @@ def main():
         spectrum_inject=model_cfg.get('spectrum_inject', False),
         kernel_T=model_cfg.get('kernel_T', 1.0),
         topk=model_cfg.get('topk', 0),
+        offdiag=model_cfg.get('offdiag', False),
+        gate=model_cfg.get('gate', False),
+        gate_init=model_cfg.get('gate_init', 0.0),
+        hp_scale=model_cfg.get('hp_scale', 1.0),
+        aux_loss=model_cfg.get('aux_loss', False),
+        aux_beta=model_cfg.get('aux_beta', 0.1),
+        kernel_sup=model_cfg.get('kernel_sup', 0.0),
         n_qubits=model_cfg.get('n_qubits', 8),
         n_layers=model_cfg.get('n_layers', 2),
         entangle_topo=model_cfg.get('entangle_topo', 'linear'),
@@ -161,6 +168,7 @@ def main():
         spectrum_amp_normalize=model_cfg.get('spectrum_amp_normalize', False),
         spectrum_time_align=model_cfg.get('spectrum_time_align', True),
         spectrum_freq_align=model_cfg.get('spectrum_freq_align', True),
+        delay_in_s=model_cfg.get('delay_in_s', False),
         use_H=model_cfg.get('use_H', True),
         use_S=model_cfg.get('use_S', True),
         reupload_source=model_cfg.get('reupload_source', 'S'),
@@ -168,7 +176,16 @@ def main():
         angle_radius=model_cfg.get('angle_radius', 1.0),
     )
     model = model.to(device)
-    
+
+    # warm-start（qkern，2026-08-13）：从 plain checkpoint 初始化（strict=False，
+    # 缺失的量子参数保持随机/门控 init），主干无需从头学，混合分支只学增量
+    init_ckpt = model_cfg.get('init_ckpt', None)
+    if init_ckpt and os.path.exists(init_ckpt):
+        ck = torch.load(init_ckpt, map_location=device, weights_only=False)
+        missing, unexpected = model.load_state_dict(ck["model_state_dict"], strict=False)
+        print(f"[warm-start] 从 {os.path.basename(init_ckpt)} 初始化: "
+              f"missing={len(missing)} unexpected={len(unexpected)}")
+
     # 打印模型信息
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -185,6 +202,7 @@ def main():
         lr=lr,
         weight_decay=weight_decay,
         proj_weight_decay=proj_weight_decay,
+        gate_lr=train_cfg.get('gate_lr', None),
     )
     
     # 训练参数

@@ -9,6 +9,15 @@ model:
   spectrum_inject: false
   kernel_T: 1.0
   topk: 0
+  offdiag: false
+  angle_norm: clamp
+  gate: false
+  gate_init: 0.0
+  hp_scale: 1.0
+  aux_loss: false
+  aux_beta: 0.1
+  kernel_sup: 0.0
+  init_ckpt: 
   n_qubits: 8
   d_token: 512
   entangle_topo: linear
@@ -38,6 +47,7 @@ train:
   num_workers: 0
   patience: 8
   proj_weight_decay: 0.0
+  gate_lr: 
   stride: 1
   use_amp: false
   weight_decay: 1.0e-05

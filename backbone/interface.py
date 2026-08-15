@@ -27,6 +27,7 @@ class BackboneOutput:
     H: torch.Tensor
     y_main: torch.Tensor
     K: Optional[torch.Tensor] = None
+    qmix_out: Optional[torch.Tensor] = None  # 最后一个量子混合层的 LN(Hp)（aux 损失用）
 
 
 class BaseBackbone(nn.Module):

@@ -241,18 +241,75 @@ def test_ablation_modes():
     print()
 
 
+def test_delay_in_s():
+    """P0-1（2026-08-14）：δ̂ 时滞入 S → S ∈ R^{2M+1}，端到端可训练。"""
+    print("=" * 60)
+    print("Test 6: Delay-in-S (P0-1)")
+    print("=" * 60)
+
+    B, L, V = 2, 96, 10
+    H_pred = 96
+    M = 32
+    if not torch.cuda.is_available():
+        print("⚠ Mamba 核仅支持 CUDA，跳过 Test 6（delay_in_s）")
+        print()
+        return
+
+    device = "cuda"
+    model = QCCMamba(
+        num_var=V, lookback=L, horizon=H_pred,
+        d_token=512, n_qubits=2, spectrum_M=M,
+        qmix_layers=1, spectrum_inject=True,  # 同时覆盖 fmap 与注入两条 S 消费路径
+        use_spectrum=True, use_H=True, use_S=True,
+        delay_in_s=True,
+    ).to(device)
+
+    x = torch.randn(B, L, V, device=device)
+    y, y_main, K = model(x)
+    assert y.shape == (B, H_pred, V), f"y shape {y.shape}"
+    assert K.shape == (B, V, V), f"K shape {K.shape}"
+
+    # S 应为 (B, V, 2M+1)：δ̂ 通道存在
+    S = model.spectrum(x)
+    assert S.shape == (B, V, 2 * M + 1), f"S shape {S.shape}, expected (B, V, {2*M+1})"
+    # δ̂ 是 detach 的（不参与图），且已归一化到 [-0.25, 0.25]
+    assert S[..., -1].abs().max() <= 0.26, f"δ̂ 超出归一化范围: {S[..., -1].abs().max()}"
+
+    loss = y.pow(2).mean()
+    loss.backward()
+    qmix0 = model.backbone.quantum_mix_layers[0]
+    assert qmix0.fmap.proj_S.weight.grad is not None, "proj_S should have gradient"
+    assert model.backbone.spectrum_inject.weight.grad is not None, "inject should have gradient"
+    print(f"✓ delay_in_s=True: S={tuple(S.shape)}，前向/反向通过")
+
+    # 默认关闭路径形状不变（回归保护）
+    model_off = QCCMamba(
+        num_var=V, lookback=L, horizon=H_pred,
+        d_token=512, n_qubits=2, spectrum_M=M,
+        qmix_layers=1, spectrum_inject=True,
+        use_spectrum=True, use_H=True, use_S=True,
+        delay_in_s=False,
+    ).to(device)
+    y_off, _, _ = model_off(x)
+    S_off = model_off.spectrum(x)
+    assert S_off.shape == (B, V, 2 * M), f"S_off shape {S_off.shape}"
+    print(f"✓ delay_in_s=False: S={tuple(S_off.shape)}（回归不变）")
+    print()
+
+
 def main():
     """运行所有冒烟测试。"""
     print("\n" + "=" * 60)
     print("DualAE-QCC Smoke Tests")
     print("=" * 60 + "\n")
-    
+
     try:
         test_spectrum_module()
         test_feature_map()
         test_qcc_block()
         test_full_model()
         test_ablation_modes()
+        test_delay_in_s()
         
         print("=" * 60)
         print("✅ All smoke tests passed!")

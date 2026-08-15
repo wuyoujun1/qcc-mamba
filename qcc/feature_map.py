@@ -96,6 +96,7 @@ class EntanglingFeatureMap(nn.Module):
         reupload_source: str = "S",
         angle_norm: str = "clamp",
         angle_radius: float = 1.0,
+        delay_in_s: bool = False,
     ):
         super().__init__()
         if entangle_topo not in self.SUPPORTED_TOPO:
@@ -139,9 +140,9 @@ class EntanglingFeatureMap(nn.Module):
             if self.proj_H.bias is not None:
                 nn.init.zeros_(self.proj_H.bias)
 
-        # proj_S: 频谱特征 → 重上传角度
+        # proj_S: 频谱特征 → 重上传角度（P0-1: delay_in_s 时 S 多 1 维 δ̂）
         if use_S:
-            self.proj_S = nn.Linear(2 * M, self.required_dim, bias=True)
+            self.proj_S = nn.Linear(2 * M + (1 if delay_in_s else 0), self.required_dim, bias=True)
             nn.init.xavier_uniform_(self.proj_S.weight)
             if self.proj_S.bias is not None:
                 nn.init.zeros_(self.proj_S.bias)

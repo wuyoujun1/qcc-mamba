@@ -43,6 +43,23 @@ def quantum_kernel_normalized(psi: torch.Tensor) -> torch.Tensor:
     return quantum_kernel(psi_n)
 
 
+def linear_overlap_kernel(psi: torch.Tensor, mode: str = "imag") -> torch.Tensor:
+    """线性内积核 K[b,i,j] = ⟨ψ_i|ψ_j⟩ 的实部/虚部（有符号）。
+
+    与保真度 |⟨ψ_i|ψ_j⟩|² 的根本区别（2026-08-13 轮 C，有向混合）：
+    - 虚部反对称（K_ij = −K_ji，相位 e^{iφ} 编码时滞/领先方向）→ 混合权重天然有向，
+      经典实向量点积无法表达；保真度 abs().pow(2) 恰好把相位（有向信息）扔掉
+    - 均值 0、相对波动 O(1) → 无保真度在 2^N 维的浓度问题（diag=1 主导 / softmax 均匀化）
+    - 对角线 Im=0 → 恒等映射问题天然不存在，无需 offdiag 补丁
+    """
+    inner = torch.einsum("bvi,bwi->bvw", psi.conj(), psi)
+    if mode == "imag":
+        return inner.imag
+    if mode == "real":
+        return inner.real
+    raise ValueError(f"mode must be 'real' or 'imag', got {mode}")
+
+
 def kernel_diag_check(K: torch.Tensor, atol: float = 1e-4) -> bool:
     """核对角线是否全 ≈ 1（酉演化保范）。"""
     eye = torch.eye(K.size(-1), device=K.device, dtype=K.dtype)

@@ -1,0 +1,53 @@
+data_dir: ../ts_quantum/datasets
+dataset: weather
+horizon: 96
+lookback: 96
+model:
+  qmix_layers: 2
+  qmix_norm: softmax
+  head_agg: false
+  spectrum_inject: false
+  kernel_T: 0.1
+  topk: 0
+  offdiag: true
+  angle_norm: clamp
+  gate: false
+  gate_init: 0.0
+  hp_scale: 0.3333333333333333
+  aux_loss: false
+  aux_beta: 0.1
+  kernel_sup: 0.0
+  init_ckpt: 
+  n_qubits: 2
+  d_token: 512
+  entangle_topo: linear
+  kernel_fn: quantum
+  n_layers: 2
+  revin_affine: true
+  spectrum_M: 32
+  spectrum_amp_normalize: false
+  spectrum_freq_align: true
+  spectrum_range: '0_2'
+  spectrum_time_align: true
+  theta_S_scale0: 0.5
+  use_H: true
+  use_S: true
+  use_fmap: true
+  use_periodic_feat: true
+  use_spectrum: true
+run_name: qm_qoff_n2_v_weather_96_42
+save_dir: /home/wuyoujun/qcc-mamba/results/qmix
+seed: 42
+train:
+  accumulation_steps: 1
+  batch_size: 32
+  epochs: 50
+  eval_test_every_epoch: false
+  lr: 0.0001
+  num_workers: 0
+  patience: 8
+  proj_weight_decay: 0.0
+  gate_lr: 
+  stride: 1
+  use_amp: false
+  weight_decay: 1.0e-05

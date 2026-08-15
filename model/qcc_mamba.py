@@ -76,6 +76,13 @@ class QCCMamba(nn.Module):
         spectrum_inject: bool = False,
         kernel_T: float = 1.0,
         topk: int = 0,
+        offdiag: bool = False,
+        gate: bool = False,
+        gate_init: float = 0.0,
+        hp_scale: float = 1.0,
+        aux_loss: bool = False,
+        aux_beta: float = 0.1,
+        kernel_sup: float = 0.0,
         n_qubits: int = 8,
         n_layers: int = 2,
         entangle_topo: str = "linear",
@@ -91,6 +98,8 @@ class QCCMamba(nn.Module):
         spectrum_amp_normalize: bool = False,
         spectrum_time_align: bool = True,
         spectrum_freq_align: bool = True,
+        # P0-1（2026-08-14）：δ̂ 时滞入 S → S = [Ã; φ̃; δ̂] ∈ R^{2M+1}
+        delay_in_s: bool = False,
         # 量子编码消融开关
         use_H: bool = True,
         use_S: bool = True,
@@ -131,6 +140,7 @@ class QCCMamba(nn.Module):
                 amp_normalize=spectrum_amp_normalize,
                 time_align=spectrum_time_align,
                 freq_align=spectrum_freq_align,
+                delay_in_s=delay_in_s,
             )
 
         # 量子混合层（进主干，每层 Mamba 之后插一层）
@@ -157,6 +167,11 @@ class QCCMamba(nn.Module):
                         output_mode="residual",
                         kernel_T=kernel_T,
                         topk=topk,
+                        offdiag=offdiag,
+                        gate=gate,
+                        gate_init=gate_init,
+                        hp_scale=hp_scale,
+                        delay_in_s=delay_in_s,
                     )
                     for _ in range(qmix_layers)
                 ]
@@ -186,12 +201,17 @@ class QCCMamba(nn.Module):
                 output_mode="raw",    # 返回 LN(Hp)，head 拼接后可直接放大
                 kernel_T=kernel_T,
                 topk=topk,
+                offdiag=offdiag,
+                gate=gate,
+                gate_init=gate_init,
+                hp_scale=hp_scale,
+                delay_in_s=delay_in_s,
             )
 
-        # 频谱注入投影
+        # 频谱注入投影（P0-1: delay_in_s 时 S 多 1 维 δ̂）
         inject = None
         if spectrum_inject and use_spectrum and use_S:
-            inject = nn.Linear(2 * spectrum_M, d_token)
+            inject = nn.Linear(2 * spectrum_M + (1 if delay_in_s else 0), d_token)
 
         # Backbone：默认 S-Mamba（量子混合/频谱注入只在默认主干内插值）
         if backbone is None:
@@ -208,6 +228,19 @@ class QCCMamba(nn.Module):
         elif qmix_layers > 0 or spectrum_inject or head_agg:
             raise ValueError("qmix/spectrum_inject/head_agg 需要默认 SMambaBackbone（自定义 backbone 无插值点）")
         self.backbone = backbone
+
+        # 辅助残差损失（qdir_aux，2026-08-13）：给量子混合分支直接学习目标
+        # L = MSE(y, y_true) + β·MSE(aux_head(LN(Hp)), (y_true - y_main).detach())
+        # 目的：Hp 学会指向残差 → γ 门控才有关联信号可开（端到端梯度弱的老问题）
+        self.aux_loss = aux_loss
+        self.aux_beta = aux_beta
+        if aux_loss:
+            self.aux_head = nn.Linear(d_token, horizon, bias=True)
+
+        # 核监督（qkern，2026-08-13）：直接教量子核学习数据的跨变量相关结构
+        # L += λ·MSE(K_batch均值, |corr(x_norm窗口)|)——K 不再靠端到端梯度"猜"，
+        # 而是被明确告知数据里的相关结构；相关矩阵是归一化结构量，比水平可迁移
+        self.kernel_sup = kernel_sup
 
     def _prepare_input(self, x: torch.Tensor, x_mark: Optional[torch.Tensor] = None) -> torch.Tensor:
         """x: (B, L, V)；可选 x_mark: (B, L, 4) [month, day, weekday, hour]。返回 backbone 输入。"""
@@ -242,6 +275,9 @@ class QCCMamba(nn.Module):
 
         out = self.backbone(x_in, S=S)
         H, y_norm, K = out.H, out.y_main, out.K  # (B, V, d), (B, H, V), (B, V, V)
+        self._last_qmix_out = out.qmix_out  # (B, V, d) 或 None（aux 损失用）
+        self._last_K = K                     # (B, V, V) 或 None（核监督用）
+        self._last_x_norm = x_norm           # (B, L, V)（核监督目标用）
 
         y = self.revin(y_norm, mode="denorm")
 
@@ -259,8 +295,19 @@ class QCCMamba(nn.Module):
         y_true_norm: torch.Tensor,
         correction_norm: torch.Tensor,
     ) -> torch.Tensor:
-        """总损失 = MSE(y, y_true)（无旁路，无辅助损失）。"""
-        return nn.functional.mse_loss(y, y_true)
+        """总损失 = MSE(y, y_true)（无旁路）；aux_loss 时加 β·MSE(aux_head(LN(Hp)), 残差)。"""
+        loss = nn.functional.mse_loss(y, y_true)
+        if self.aux_loss and self._last_qmix_out is not None:
+            aux_pred = self.aux_head(self._last_qmix_out)          # (B, V, H)
+            residual = (y_true - y_main).detach().transpose(1, 2)  # (B, V, H)
+            loss = loss + self.aux_beta * nn.functional.mse_loss(aux_pred, residual)
+        if self.kernel_sup > 0 and self._last_K is not None and self._last_x_norm is not None:
+            # 核监督：K（批均值）→ 数据窗口的 |相关矩阵|（两者均 [0,1]、对角 1）
+            xf = self._last_x_norm.double().reshape(-1, self._last_x_norm.shape[-1])
+            corr = torch.corrcoef(xf.T).abs().float()              # (V, V)
+            Kb = self._last_K.mean(0)                              # (V, V)
+            loss = loss + self.kernel_sup * nn.functional.mse_loss(Kb, corr)
+        return loss
 
 
 __all__ = ["QCCMamba"]

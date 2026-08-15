@@ -44,10 +44,20 @@ model:
   spectrum_inject: {spectrum_inject}
   kernel_T: {kernel_T}
   topk: {topk}
+  offdiag: {offdiag}
+  angle_norm: {angle_norm}
+  gate: {gate}
+  gate_init: {gate_init}
+  hp_scale: {hp_scale}
+  delay_in_s: {delay_in_s}
+  aux_loss: {aux_loss}
+  aux_beta: {aux_beta}
+  kernel_sup: {kernel_sup}
+  init_ckpt: {init_ckpt}
   n_qubits: {n_qubits}
   d_token: 512
   entangle_topo: linear
-  kernel_fn: quantum
+  kernel_fn: {kernel_fn}
   n_layers: 2
   revin_affine: true
   spectrum_M: 32
@@ -73,25 +83,96 @@ train:
   num_workers: 0
   patience: 8
   proj_weight_decay: 0.0
+  gate_lr: {gate_lr}
   stride: 1
   use_amp: false
   weight_decay: 1.0e-05
 """
 
 VARIANTS = {
-    # 2026-08-12 选择性修复（正交开关：温度 × n_qubits × topk × 位置）
-    "qmix_T10":     dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1,  n_qubits=8),
-    "qmix_T10_n4":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1,  n_qubits=4),
-    "qmix_head_T10":dict(qmix_layers=0, head_agg=True,       kernel_T=0.1,  n_qubits=8),
-    "qmix_topk":    dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1,  topk=2, n_qubits=8),
+    # 2026-08-13 轮 C：有向线性内积核 + 零门控（量子特有优势的第一次使用）
+    # 保真度 |⟨ψ|ψ⟩|² 扔掉相位(有向时滞信息)且撞浓度定理；线性内积虚部反对称=有向、
+    # 均值 0 无浓度问题；γ 门控 init=0 → 结构保证不更差
+    "qdir":        dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=True, angle_norm="clamp", n_qubits=8),
+    "qdir_real":   dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_real",
+                        gate=True, angle_norm="clamp", n_qubits=8),
+    "qdir_n4":     dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=True, angle_norm="clamp", n_qubits=4),
+    "qdir_sin":    dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=True, angle_norm="clamp", n_qubits=8, spectrum_inject=True),
+    # 轮 D：给量子混合分支直接学习目标（辅助残差损失）——解决 γ 不开的"无信号"问题
+    # L = MSE(y,y_true) + β·MSE(aux_head(LN(Hp)), residual.detach())；推理仍 y=y_main
+    "qdir_aux":    dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=True, aux_loss=True, aux_beta=0.1, angle_norm="clamp", n_qubits=8),
+    "qdir_aux_g":  dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=True, gate_init=0.05, aux_loss=True, aux_beta=0.1,
+                        angle_norm="clamp", n_qubits=8),
+    # 轮 F：缩小态空间（浓度定理正解）——n2/n3 保真度幅度 1/4~1/8，对齐结构可读
+    # 轮 E 注释保留：核监督 + warm-start（量子核第一次被告知数据里的跨变量结构）
+    # K 直接学 |corr(x_norm)|（相关矩阵比水平可迁移）；从 plain checkpoint 微调，
+    # 主干不重学、混合分支只学增量；γ init 0.05 给引导性开口
+    "qkern_sup":   dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=True, gate_init=0.05, kernel_sup=0.1, warm_start=True,
+                        angle_norm="clamp", n_qubits=8),
+    "qkern_warm":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=True, gate_init=0.05, kernel_sup=0.0, warm_start=True,
+                        angle_norm="clamp", n_qubits=8),
+    # 轮 F（2026-08-13）：小态空间 = 浓度定理正解
+    # n=2 (4维)/n=3 (8维)：保真度幅度 1/4~1/8 相对波动 O(1)——对齐结构第一次可读，
+    # 有向核 Im 幅度 0.3~0.5（不再是 1/256 噪声级）
+    "qdir_n2":     dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=True, gate_init=0.05, angle_norm="clamp", n_qubits=2),
+    "qdir_n3":     dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
+                        gate=True, gate_init=0.05, angle_norm="clamp", n_qubits=3),
+    "qoff_n2":     dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=True, gate_init=0.05, angle_norm="clamp", n_qubits=2),
+    "qoff_n2_f":   dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=False, angle_norm="clamp", n_qubits=2),
+    # 轮 G：混合输出固定缩放（防 V=21 大变量集强信号发散）+ 全矩阵扩档
+    "qoff_n2_s":   dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=False, hp_scale=0.2, angle_norm="clamp", n_qubits=2),
+    "qoff_n2_g":   dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=True, gate_init=0.05, hp_scale=0.5, angle_norm="clamp", n_qubits=2),
+    "qoff_n2_tk":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        topk=2, hp_scale=0.5, angle_norm="clamp", n_qubits=2),
+    "qoff_n2_fs":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=False, hp_scale=0.5, angle_norm="clamp", n_qubits=2),
+    "qoff_n2_f1":  dict(qmix_layers=1, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=False, angle_norm="clamp", n_qubits=2),
+    # 轮 I：自适应满强度门控——γ init 开着头学（etth1 能全开，electricity/weather 自动关小）
+    "qoff_n2_g2":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=True, gate_init=0.5, angle_norm="clamp", n_qubits=2),
+    "qoff_n2_g3":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=True, gate_init=1.0, angle_norm="clamp", n_qubits=2),
+    # 轮 J：γ 加速学习（实测 γ 50 epoch 只动 7%——梯度弱；gate_lr=0.01 让它按 cell 快速自适应）
+    "qoff_n2_g4":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=True, gate_init=1.0, gate_lr=0.01, angle_norm="clamp", n_qubits=2),
+    # 轮 K：hp_scale = 7/V 按变量数归一化（第一性原理）——混合注入随 V 稀释：
+    # etth1(V=7)→1.0 全强度(f 的赢面)、weather(V=21)→0.33(fs 区间)、electricity(V=321)→0.022(微调)
+    # 一个配置自动适配所有数据集，无需学习
+    "qoff_n2_v":   dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2),
+    # 轮 L（electricity 对策）：v 归一化缩放 + topk=2 选择性混合——321 变量全对全核噪音大，
+    # 只混合 K 最相关的 2 个邻居（决策树 D 步；tk 固定 0.5 缩放对 321 变量过大，改用 v 缩放）
+    "qoff_n2_vtk": dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        topk=2, gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2),
+    # 轮 L（P0-1，ins.md 头号候选）：δ̂ 时滞入 S → S=[Ã; φ̃; δ̂]（65 维），δ̂ detach，
+    # 让量子核同时度量"形状相似 + 时滞关系"（DeMa 赢的核心是时滞建模；时滞是主干零响应的独有信息）
+    "qoff_n2_vd":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
+                        gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2,
+                        delay_in_s=True),
     # 基准（plain 永不变）
-    "plain":        dict(qmix_layers=0, qmix_norm="avg",     head_agg=False, spectrum_inject=False,
-                         kernel_T=1.0, topk=0, n_qubits=8),
+    "plain":       dict(qmix_layers=0, qmix_norm="avg", head_agg=False, spectrum_inject=False,
+                        kernel_T=1.0, topk=0, offdiag=False, angle_norm="clamp",
+                        n_qubits=8, kernel_fn="quantum", gate=False),
 }
 # 快速验证集（用户限定）：3 数据集 × 4 档位 × 1 seed
 CELLS = [("etth1", 96), ("etth1", 192), ("etth1", 336), ("etth1", 720),
          ("weather", 96), ("weather", 192), ("weather", 336), ("weather", 720),
          ("electricity", 96), ("electricity", 192), ("electricity", 336), ("electricity", 720)]
+# 各数据集变量数（hp_scale_v 归一化用）
+DATASET_VARS = {"etth1": 7, "weather": 21, "electricity": 321, "chinaaqi": 342}
 SEEDS = [42]
 
 
@@ -108,7 +189,21 @@ def make_yaml(ds, L, seed, variant):
         spectrum_inject="true" if flags.get("spectrum_inject", False) else "false",
         kernel_T=flags.get("kernel_T", 1.0),
         topk=flags.get("topk", 0),
+        offdiag="true" if flags.get("offdiag", False) else "false",
+        angle_norm=flags.get("angle_norm", "clamp"),
+        gate="true" if flags.get("gate", False) else "false",
+        gate_init=flags.get("gate_init", 0.0),
+        gate_lr=flags.get("gate_lr", ""),
+        hp_scale=(7.0 / DATASET_VARS.get(ds, 21) if flags.get("hp_scale_v", False)
+                  else flags.get("hp_scale", 1.0)),
+        aux_loss="true" if flags.get("aux_loss", False) else "false",
+        aux_beta=flags.get("aux_beta", 0.1),
+        kernel_sup=flags.get("kernel_sup", 0.0),
+        init_ckpt=(os.path.join(ROOT, SAVE_DIR, f"qm_plain_{ds}_{L}_{seed}_best.pt")
+                   if flags.get("warm_start", False) else ""),
+        kernel_fn=flags.get("kernel_fn", "quantum"),
         n_qubits=flags.get("n_qubits", 8),
+        delay_in_s="true" if flags.get("delay_in_s", False) else "false",
     )
     with open(yaml_path, "w") as f:
         f.write(text)
@@ -162,8 +257,11 @@ def main():
     ap.add_argument("--max", type=int, default=None)
     ap.add_argument("--scope", default=None, help="如 'etth1:96+720'，逗号分隔数据集")
     ap.add_argument("--variants", default=None, help="变体子集，如 'qmix+qmix_sin'")
+    ap.add_argument("--seeds", default=None, help="种子列表，如 '42+2024'（默认 SEEDS 常量）")
+    ap.add_argument("--jobs", type=int, default=2, help="并发数（大变量 cell 用 1 更稳）")
     ap.add_argument("--dry", action="store_true")
     args = ap.parse_args()
+    seeds = [int(s) for s in args.seeds.split("+")] if args.seeds else SEEDS
 
     variants = {k: v for k, v in VARIANTS.items() if k in args.variants.split("+")} if args.variants else VARIANTS
 
@@ -172,13 +270,13 @@ def main():
         for part in args.scope.split(","):
             ds, _, ls = part.partition(":")
             for L in [int(x) for x in ls.split("+")]:
-                for s in SEEDS:
+                for s in seeds:
                     for v in variants:
                         jobs.append((ds, L, s, v))
     else:
-        jobs = [(ds, L, s, v) for ds, L in CELLS for s in SEEDS for v in variants]
+        jobs = [(ds, L, s, v) for ds, L in CELLS for s in seeds for v in variants]
     total = len(jobs) if args.max is None else min(len(jobs), args.max)
-    print(f"变体: {list(variants)}；共 {total} 个实验（快 cell 优先），2 并发", flush=True)
+    print(f"变体: {list(variants)}；共 {total} 个实验（快 cell 优先），{args.jobs} 并发", flush=True)
 
     os.makedirs(YAML_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -194,7 +292,7 @@ def main():
         return
 
     results = []
-    with ThreadPoolExecutor(max_workers=2) as ex:
+    with ThreadPoolExecutor(max_workers=args.jobs) as ex:
         futs = {ex.submit(run_one, j): j for j in jobs[:total]}
         done = 0
         for fut in as_completed(futs):

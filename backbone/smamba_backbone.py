@@ -122,6 +122,7 @@ class SMambaBackbone(BaseBackbone):
             enc_out[:, :V, :] = enc_out[:, :V, :] + self.spectrum_inject(S.float())
 
         K_last = None
+        qmix_last = None  # 无量子混合时保持 None（plain）——2026-08-14 修：之前在 if 分支内导致 plain 崩溃
         if self.quantum_mix_layers is not None and len(self.quantum_mix_layers) > 0:
             # 量子混合主干：每层 Mamba 后插量子核跨变量混合
             # 量子混合只作用于 V 个变量 token（fmap 的 S 角度需要与 H 匹配），
@@ -134,6 +135,7 @@ class SMambaBackbone(BaseBackbone):
                     enc_mixed, K = self.quantum_mix_layers[i](enc_var, S)
                     enc_out = torch.cat([enc_mixed, enc_out[:, V:, :]], dim=1)
                     K_last = K
+                    qmix_last = self.quantum_mix_layers[i]._last_Hp  # (B, V, d) aux 用
             if self.encoder.norm is not None:
                 enc_out = self.encoder.norm(enc_out)
         else:
@@ -157,7 +159,7 @@ class SMambaBackbone(BaseBackbone):
             y_main = y_main * (stdev[:, 0, :V].unsqueeze(1).repeat(1, self.horizon, 1))
             y_main = y_main + (means[:, 0, :V].unsqueeze(1).repeat(1, self.horizon, 1))
 
-        return BackboneOutput(H=H, y_main=y_main, K=K_last)
+        return BackboneOutput(H=H, y_main=y_main, K=K_last, qmix_out=qmix_last)
 
 
 __all__ = ["SMambaBackbone"]
