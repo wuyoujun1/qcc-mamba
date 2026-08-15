@@ -1,0 +1,67 @@
+data_dir: ../ts_quantum/datasets
+dataset: etth1
+horizon: 720
+lookback: 720
+model:
+  qmix_layers: 0
+  qmix_norm: avg
+  head_agg: false
+  spectrum_inject: false
+  kernel_T: 1.0
+  topk: 0
+  offdiag: false
+  angle_norm: clamp
+  gate: false
+  gate_init: 0.0
+  hp_scale: 1.0
+  delay_in_s: false
+  aux_loss: false
+  aux_beta: 0.1
+  kernel_sup: 0.0
+  init_ckpt: 
+  n_qubits: 2
+  # P2-1 双路径（2026-08-15）：时间 SSM 单向 + 量子核独占跨变量
+  dual_path: false
+  dp_time_layers: 2
+  dp_time_dim: 256
+  dp_time_pool: mean
+  dp_var_embed: true
+  dp_msg: S
+  dp_fusion: add
+  # QK-Path（量子核独立预测通道）
+  qk_path: true
+  qk_gate_init: 0.5
+  qk_use_H: false
+  qk_norm: l1
+  d_token: 512
+  entangle_topo: linear
+  kernel_fn: linear_imag
+  n_layers: 2
+  revin_affine: true
+  spectrum_M: 32
+  spectrum_amp_normalize: false
+  spectrum_freq_align: true
+  spectrum_range: '0_2'
+  spectrum_time_align: true
+  theta_S_scale0: 0.5
+  use_H: true
+  use_S: true
+  use_fmap: true
+  use_periodic_feat: true
+  use_spectrum: true
+run_name: qm_qk2_dir_etth1_720_42
+save_dir: /home/wuyoujun/qcc-mamba/results/qmix
+seed: 42
+train:
+  accumulation_steps: 1
+  batch_size: 32
+  epochs: 50
+  eval_test_every_epoch: false
+  lr: 0.0001
+  num_workers: 0
+  patience: 8
+  proj_weight_decay: 0.0
+  gate_lr: 
+  stride: 1
+  use_amp: false
+  weight_decay: 1.0e-05
