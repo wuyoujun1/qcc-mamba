@@ -55,6 +55,14 @@ model:
   kernel_sup: {kernel_sup}
   init_ckpt: {init_ckpt}
   n_qubits: {n_qubits}
+  # P2-1 双路径（2026-08-15）：时间 SSM 单向 + 量子核独占跨变量
+  dual_path: {dual_path}
+  dp_time_layers: {dp_time_layers}
+  dp_time_dim: {dp_time_dim}
+  dp_time_pool: {dp_time_pool}
+  dp_var_embed: {dp_var_embed}
+  dp_msg: {dp_msg}
+  dp_fusion: {dp_fusion}
   d_token: 512
   entangle_topo: linear
   kernel_fn: {kernel_fn}
@@ -162,6 +170,25 @@ VARIANTS = {
     "qoff_n2_vd":  dict(qmix_layers=2, qmix_norm="softmax", kernel_T=0.1, offdiag=True,
                         gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2,
                         delay_in_s=True),
+    # P2-1 双路径（2026-08-15）：时间 SSM 单向 + 量子核独占跨变量
+    # 主干不再扫变量轴（去掉隐式跨变量），量子核是唯一跨变量通道；
+    # K 读 S（对齐频谱，主干拿不到）而非 H；softmax 行归一化消息 O(1)，无 1/V 稀释。
+    # hp_scale_v 不需要：γ 门控是唯一强度调节器（init=0.05 引导开口 + gate_lr 快速自适应）
+    "dp_time":  dict(qmix_layers=0, dual_path=True, dp_fusion="time_only",
+                     dp_time_layers=2, dp_time_dim=256),  # 新 plain 基线（无跨变量通道）
+    "dp":       dict(qmix_layers=0, dual_path=True, dp_fusion="add",
+                     gate=True, gate_init=0.05, gate_lr=0.01,
+                     kernel_T=0.1, offdiag=True, n_qubits=2),  # 主线：S 消息 + 门控融合
+    "dp_ng":    dict(qmix_layers=0, dual_path=True, dp_fusion="add",
+                     gate=False, kernel_T=0.1, offdiag=True, n_qubits=2),  # 无门控满强度
+    "dp_con":   dict(qmix_layers=0, dual_path=True, dp_fusion="concat",
+                     kernel_T=0.1, offdiag=True, n_qubits=2),  # concat 融合消融
+    "dp_hmsg":  dict(qmix_layers=0, dual_path=True, dp_fusion="add", dp_msg="H",
+                     gate=True, gate_init=0.05, gate_lr=0.01,
+                     kernel_T=0.1, offdiag=True, n_qubits=2),  # 消息=H_time（信息重合对照）
+    "dp_d":     dict(qmix_layers=0, dual_path=True, dp_fusion="add",
+                     gate=True, gate_init=0.05, gate_lr=0.01,
+                     kernel_T=0.1, offdiag=True, n_qubits=2, delay_in_s=True),  # +δ̂ 时滞
     # 基准（plain 永不变）
     "plain":       dict(qmix_layers=0, qmix_norm="avg", head_agg=False, spectrum_inject=False,
                         kernel_T=1.0, topk=0, offdiag=False, angle_norm="clamp",
@@ -204,6 +231,14 @@ def make_yaml(ds, L, seed, variant):
         kernel_fn=flags.get("kernel_fn", "quantum"),
         n_qubits=flags.get("n_qubits", 8),
         delay_in_s="true" if flags.get("delay_in_s", False) else "false",
+        # P2-1 双路径
+        dual_path="true" if flags.get("dual_path", False) else "false",
+        dp_time_layers=flags.get("dp_time_layers", 2),
+        dp_time_dim=flags.get("dp_time_dim", 256),
+        dp_time_pool=flags.get("dp_time_pool", "mean"),
+        dp_var_embed="true" if flags.get("dp_var_embed", True) else "false",
+        dp_msg=flags.get("dp_msg", "S"),
+        dp_fusion=flags.get("dp_fusion", "add"),
     )
     with open(yaml_path, "w") as f:
         f.write(text)

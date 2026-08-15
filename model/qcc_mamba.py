@@ -23,6 +23,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from backbone.dual_path_backbone import DualPathBackbone
 from backbone.interface import BaseBackbone
 from backbone.smamba_backbone import SMambaBackbone
 from data.preprocess import IntegerTimeFeatures, RevIN
@@ -106,6 +107,14 @@ class QCCMamba(nn.Module):
         reupload_source: str = "S",
         angle_norm: str = "clamp",
         angle_radius: float = 1.0,
+        # P2-1 双路径（2026-08-15）：时间 SSM 单向 + 量子核独占跨变量
+        dual_path: bool = False,
+        dp_time_layers: int = 2,
+        dp_time_dim: int = 256,
+        dp_time_pool: str = "mean",
+        dp_var_embed: bool = True,
+        dp_msg: str = "S",
+        dp_fusion: str = "add",
     ):
         super().__init__()
         self.num_var = num_var
@@ -119,6 +128,8 @@ class QCCMamba(nn.Module):
 
         if qmix_layers > 0 and not (use_spectrum and use_S):
             raise ValueError("qmix_layers>0 需要 use_spectrum=True 且 use_S=True（S 特征驱动量子核）")
+        if dual_path and dp_fusion != "time_only" and not (use_spectrum and use_S):
+            raise ValueError("dual_path 变量路径需要 use_spectrum=True 且 use_S=True（S 特征驱动量子核）")
 
         # RevIN：实例归一化
         self.revin = RevIN(num_features=num_var, affine=revin_affine)
@@ -213,8 +224,39 @@ class QCCMamba(nn.Module):
         if spectrum_inject and use_spectrum and use_S:
             inject = nn.Linear(2 * spectrum_M + (1 if delay_in_s else 0), d_token)
 
-        # Backbone：默认 S-Mamba（量子混合/频谱注入只在默认主干内插值）
-        if backbone is None:
+        # Backbone：默认 S-Mamba（量子混合/频谱注入只在默认主干内插值）；
+        # dual_path=True 时用双路径主干（时间 SSM 单向 + 量子核独占跨变量）
+        if dual_path:
+            if backbone is not None:
+                raise ValueError("dual_path=True 时不能传自定义 backbone")
+            backbone = DualPathBackbone(
+                num_var=num_var,
+                lookback=lookback,
+                horizon=horizon,
+                d_token=d_token,
+                n_feats=4 if use_periodic_feat else 0,
+                dp_time_layers=dp_time_layers,
+                dp_time_dim=dp_time_dim,
+                dp_time_pool=dp_time_pool,
+                dp_var_embed=dp_var_embed,
+                dp_msg=dp_msg,
+                dp_fusion=dp_fusion,
+                M=spectrum_M,
+                n_qubits=n_qubits,
+                n_layers=n_layers,
+                entangle_topo=entangle_topo,
+                kernel_fn=kernel_fn,
+                kernel_T=kernel_T,
+                topk=topk,
+                offdiag=offdiag,
+                gate=gate,
+                gate_init=gate_init,
+                theta_S_scale0=theta_S_scale0,
+                angle_norm=angle_norm,
+                angle_radius=angle_radius,
+                delay_in_s=delay_in_s,
+            )
+        elif backbone is None:
             backbone = SMambaBackbone(
                 num_var=num_var,
                 lookback=lookback,

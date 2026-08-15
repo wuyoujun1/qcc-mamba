@@ -138,6 +138,7 @@ class QuantumMixLayer(nn.Module):
                 reupload_source=reupload_source,
                 angle_norm=angle_norm,
                 angle_radius=angle_radius,
+                delay_in_s=delay_in_s,  # P0-1: δ̂ 通道 → proj_S 输入 2M+1（此前漏传导致 65 维 S 崩溃）
             )
 
         if kernel_fn is None:

@@ -23,6 +23,7 @@ from qcc.feature_map import EntanglingFeatureMap
 from qcc.quantum_mix import QuantumMixLayer
 from model.qcc_mamba import QCCMamba
 from backbone.interface import MockBackbone
+from backbone.dual_path_backbone import DualPathBackbone
 
 
 def test_spectrum_module():
@@ -297,6 +298,141 @@ def test_delay_in_s():
     print()
 
 
+def test_dual_path_backbone():
+    """Test 7: 双路径主干维度流转 + 梯度完整性（P2-1，2026-08-15）。"""
+    print("=" * 60)
+    print("Test 7: Dual Path Backbone (P2-1)")
+    print("=" * 60)
+
+    if not torch.cuda.is_available():
+        print("⚠ Mamba 核仅支持 CUDA，跳过 Test 7（双路径主干）")
+        print()
+        return
+
+    B, L, V = 2, 96, 10
+    H_pred = 96
+    d_token = 64  # 小参数版（省显存）
+
+    device = "cuda"
+    model = DualPathBackbone(
+        num_var=V, lookback=L, horizon=H_pred,
+        d_token=d_token, n_feats=4,
+        dp_fusion="add", gate=True, gate_init=0.05,
+        kernel_T=0.1, offdiag=True, n_qubits=2,
+        delay_in_s=True,
+    ).to(device)
+
+    x = torch.randn(B, L, V + 4, device=device)  # 含 4 列时间特征
+    S = torch.randn(B, V, 2 * 32 + 1, device=device)  # delay_in_s → 2M+1
+
+    out = model(x, S)
+
+    print(f"Input: x = {x.shape}, S = {S.shape}")
+    print(f"Output: H = {out.H.shape}, y_main = {out.y_main.shape}, K = {out.K.shape}")
+
+    assert out.H.shape == (B, V, d_token), f"H shape {out.H.shape}"
+    assert out.y_main.shape == (B, H_pred, V), f"y_main shape {out.y_main.shape}"
+    assert out.K.shape == (B, V, V), f"K shape {out.K.shape}"
+    assert out.qmix_out is not None and out.qmix_out.shape == (B, V, d_token), "qmix_out"
+
+    # 梯度完整性（覆盖 γ 饿死回归：msg_proj/proj_S/W_q/_gate_raw/in_proj 都必须有梯度）
+    loss = out.y_main.pow(2).mean()
+    loss.backward()
+    vp = model.var_path
+    assert vp.msg_proj.weight.grad is not None, "msg_proj 无梯度（γ 饿死?）"
+    assert vp.qmix.fmap.proj_S.weight.grad is not None, "proj_S 无梯度"
+    assert vp.qmix.W_q.weight.grad is not None, "W_q 无梯度"
+    assert model._gate_raw.grad is not None, "_gate_raw 无梯度"
+    assert model.time_path.in_proj.weight.grad is not None, "in_proj 无梯度"
+
+    print("✓ Dual path output dimensions correct")
+    print("✓ Gradients flow through var path + gate + time path")
+    print()
+
+
+def test_dual_path_structure_equivalence():
+    """Test 8: 结构保证不更差 — γ=0 时 add 融合 ≡ 纯时间路径（精确验证）。"""
+    print("=" * 60)
+    print("Test 8: Dual Path γ=0 ≡ time_only")
+    print("=" * 60)
+
+    if not torch.cuda.is_available():
+        print("⚠ Mamba 核仅支持 CUDA，跳过 Test 8（结构等价）")
+        print()
+        return
+
+    B, L, V = 2, 96, 10
+    H_pred = 96
+    d_token = 64
+
+    device = "cuda"
+    model = DualPathBackbone(
+        num_var=V, lookback=L, horizon=H_pred,
+        d_token=d_token, n_feats=0,
+        dp_fusion="add", gate=True, gate_init=0.0,  # γ=0
+        kernel_T=0.1, offdiag=True, n_qubits=2,
+    ).to(device)
+    model.eval()
+
+    x = torch.randn(B, L, V, device=device)
+    S = torch.randn(B, V, 2 * 32, device=device)
+
+    with torch.no_grad():
+        y_gate0 = model(x, S).y_main                       # H = H_time + 0·H_var = H_time
+        H_time = model.time_path(x)
+        y_pure = model.pred_head(H_time).transpose(1, 2)   # 纯时间路径过同一 head
+
+    assert torch.allclose(y_gate0, y_pure, atol=1e-6), "γ=0 时 add 融合应 ≡ 纯时间路径"
+
+    print("✓ γ=0 → H ≡ H_time（结构保证不更差成立）")
+    print()
+
+
+def test_dual_path_full_model():
+    """Test 9: 完整模型（CUDA）：QCCMamba(dual_path=True) 前向反向 + 周期特征拆分。"""
+    print("=" * 60)
+    print("Test 9: Full Model (dual_path, CUDA)")
+    print("=" * 60)
+
+    if not torch.cuda.is_available():
+        print("⚠ Mamba 核仅支持 CUDA，跳过 Test 9（双路径全模型）")
+        print()
+        return
+
+    B, L, V = 2, 96, 10
+    H_pred = 96
+    d_token = 64
+
+    device = "cuda"
+    model = QCCMamba(
+        num_var=V, lookback=L, horizon=H_pred,
+        d_token=d_token,
+        dual_path=True, dp_fusion="add",
+        gate=True, gate_init=0.05,
+        kernel_T=0.1, offdiag=True, n_qubits=2,
+        delay_in_s=True,
+        use_periodic_feat=True,   # V+4 拆分路径
+        use_spectrum=True, use_S=True,
+    ).to(device)
+
+    x = torch.randn(B, L, V, device=device)
+    x_mark = torch.randint(0, 24, (B, L, 4), device=device).float()
+
+    y, y_main, K = model(x, x_mark=x_mark)
+
+    print(f"Output: y = {y.shape}, K = {K.shape}")
+    assert y.shape == (B, H_pred, V), f"y shape {y.shape}"
+    assert K.shape == (B, V, V), f"K shape {K.shape}"
+
+    loss = y.pow(2).mean()
+    loss.backward()
+    assert model.backbone.time_path.in_proj.weight.grad is not None, "in_proj 无梯度"
+    assert model.backbone.var_path.msg_proj.weight.grad is not None, "msg_proj 无梯度"
+
+    print("✓ Full dual-path model forward/backward OK（含周期特征拆分）")
+    print()
+
+
 def main():
     """运行所有冒烟测试。"""
     print("\n" + "=" * 60)
@@ -310,7 +446,10 @@ def main():
         test_full_model()
         test_ablation_modes()
         test_delay_in_s()
-        
+        test_dual_path_backbone()
+        test_dual_path_structure_equivalence()
+        test_dual_path_full_model()
+
         print("=" * 60)
         print("✅ All smoke tests passed!")
         print("=" * 60)

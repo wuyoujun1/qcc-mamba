@@ -174,6 +174,14 @@ def main():
         reupload_source=model_cfg.get('reupload_source', 'S'),
         angle_norm=model_cfg.get('angle_norm', 'clamp'),
         angle_radius=model_cfg.get('angle_radius', 1.0),
+        # P2-1 双路径（2026-08-15）：时间 SSM 单向 + 量子核独占跨变量
+        dual_path=model_cfg.get('dual_path', False),
+        dp_time_layers=model_cfg.get('dp_time_layers', 2),
+        dp_time_dim=model_cfg.get('dp_time_dim', 256),
+        dp_time_pool=model_cfg.get('dp_time_pool', 'mean'),
+        dp_var_embed=model_cfg.get('dp_var_embed', True),
+        dp_msg=model_cfg.get('dp_msg', 'S'),
+        dp_fusion=model_cfg.get('dp_fusion', 'add'),
     )
     model = model.to(device)
 
@@ -250,7 +258,10 @@ def main():
     print(f"\nTraining history saved to: {history_path}")
 
     # 可解释性：K 矩阵统计（对角 ≈ 1，非对角 = 跨变量保真度均值）
-    if getattr(model, 'backbone', None) is not None and getattr(model.backbone, 'quantum_mix_layers', None):
+    _backbone = getattr(model, 'backbone', None)
+    _has_k = (getattr(_backbone, 'quantum_mix_layers', None)
+              or getattr(_backbone, 'var_path', None))  # P2-1 双路径变量路径也有 K
+    if _backbone is not None and _has_k:
         try:
             kstats = compute_k_stats(model, loaders['test'], device)
             if kstats is not None:
