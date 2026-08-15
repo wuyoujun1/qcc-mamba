@@ -63,6 +63,11 @@ model:
   dp_var_embed: {dp_var_embed}
   dp_msg: {dp_msg}
   dp_fusion: {dp_fusion}
+  # QK-Path（量子核独立预测通道）
+  qk_path: {qk_path}
+  qk_gate_init: {qk_gate_init}
+  qk_use_H: {qk_use_H}
+  qk_norm: {qk_norm}
   d_token: 512
   entangle_topo: linear
   kernel_fn: {kernel_fn}
@@ -216,6 +221,14 @@ VARIANTS = {
                         kernel_fn="rbf"),  # 同机制换经典核（数据无差异则 rbf 也均匀）
     "qoff_n2_dir": dict(qmix_layers=2, qmix_norm="l1", kernel_fn="linear_imag",
                         gate=False, hp_scale_v=True, angle_norm="clamp", n_qubits=2),  # 有向核无浓度问题
+    # QK-Path（2026-08-15）：量子核独立预测通道 —— 主干 plain 最强形态 + 量子核独立
+    # 出预测 y_qk，γ 门控融合（γ=0 → 精确 plain）。核形态消融（保真度/rbf/有向）：
+    "qk":      dict(qmix_layers=0, qk_path=True, kernel_T=0.1, offdiag=True,
+                    n_qubits=2, gate_lr=0.01),  # 保真度核（保留元件）
+    "qk_rbf":  dict(qmix_layers=0, qk_path=True, kernel_fn="rbf", kernel_T=0.1,
+                    offdiag=True, n_qubits=2, gate_lr=0.01),  # rbf（el 诊断有选择性）
+    "qk_dir":  dict(qmix_layers=0, qk_path=True, kernel_fn="linear_imag", qk_norm="l1",
+                    n_qubits=2, gate_lr=0.01),  # 有向核（无浓度问题）
     # 基准（plain 永不变）
     "plain":       dict(qmix_layers=0, qmix_norm="avg", head_agg=False, spectrum_inject=False,
                         kernel_T=1.0, topk=0, offdiag=False, angle_norm="clamp",
@@ -266,6 +279,11 @@ def make_yaml(ds, L, seed, variant):
         dp_var_embed="true" if flags.get("dp_var_embed", True) else "false",
         dp_msg=flags.get("dp_msg", "S"),
         dp_fusion=flags.get("dp_fusion", "add"),
+        # QK-Path
+        qk_path="true" if flags.get("qk_path", False) else "false",
+        qk_gate_init=flags.get("qk_gate_init", 0.05),
+        qk_use_H="true" if flags.get("qk_use_H", False) else "false",
+        qk_norm=flags.get("qk_norm", "softmax"),
     )
     with open(yaml_path, "w") as f:
         f.write(text)

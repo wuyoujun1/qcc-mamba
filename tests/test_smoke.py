@@ -433,6 +433,58 @@ def test_dual_path_full_model():
     print()
 
 
+def test_qk_path():
+    """Test 10: QK-Path（量子核独立预测通道）：维度 + 梯度 + γ=0 结构等价。"""
+    print("=" * 60)
+    print("Test 10: QK-Path (量子核独立预测通道)")
+    print("=" * 60)
+
+    if not torch.cuda.is_available():
+        print("⚠ Mamba 核仅支持 CUDA，跳过 Test 10（QK-Path）")
+        print()
+        return
+
+    B, L, V = 2, 96, 10
+    H_pred = 96
+    d_token = 64
+
+    device = "cuda"
+    model = QCCMamba(
+        num_var=V, lookback=L, horizon=H_pred,
+        d_token=d_token,
+        qk_path=True, qk_gate_init=0.05,
+        kernel_T=0.1, offdiag=True, n_qubits=2,
+        use_spectrum=True, use_S=True,
+    ).to(device)
+
+    x = torch.randn(B, L, V, device=device)
+    y, y_main, K = model(x)
+
+    assert y.shape == (B, H_pred, V), f"y shape {y.shape}"
+    assert K.shape == (B, V, V), f"K shape {K.shape}"
+    assert model.qk_mix is not None and model.qk_head is not None
+
+    loss = y.pow(2).mean()
+    loss.backward()
+    assert model._qk_gate_raw.grad is not None, "_qk_gate_raw 无梯度"
+    assert model.qk_mix.fmap.proj_S.weight.grad is not None, "qk proj_S 无梯度"
+    assert model.qk_head.weight.grad is not None, "qk_head 无梯度"
+    assert model.backbone.pred_head.weight.grad is not None, "主干 head 无梯度"
+
+    # γ=0 → y 精确等于 plain 主干输出（结构保证不更差）
+    model.eval()
+    with torch.no_grad():
+        model._qk_gate_raw.fill_(0.0)
+        y_g0, _, _ = model(x)
+        x_norm = model.revin(x, mode="norm")  # 与 model(x) 内部相同的 RevIN 路径
+        y_plain = model.revin(model.backbone(x_norm, S=model.spectrum(x_norm)).y_main,
+                              mode="denorm")
+    assert torch.allclose(y_g0, y_plain, atol=1e-6), "γ=0 时 QK-Path 应精确等于 plain"
+
+    print("✓ QK-Path 维度/梯度/γ=0 结构等价全部通过")
+    print()
+
+
 def main():
     """运行所有冒烟测试。"""
     print("\n" + "=" * 60)
@@ -449,6 +501,7 @@ def main():
         test_dual_path_backbone()
         test_dual_path_structure_equivalence()
         test_dual_path_full_model()
+        test_qk_path()
 
         print("=" * 60)
         print("✅ All smoke tests passed!")

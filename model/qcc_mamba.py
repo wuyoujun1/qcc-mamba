@@ -115,6 +115,11 @@ class QCCMamba(nn.Module):
         dp_var_embed: bool = True,
         dp_msg: str = "S",
         dp_fusion: str = "add",
+        # QK-Path（2026-08-15）：量子核独立预测通道，与主干并行融合
+        qk_path: bool = False,
+        qk_gate_init: float = 0.05,
+        qk_use_H: bool = False,
+        qk_norm: str = "softmax",
     ):
         super().__init__()
         self.num_var = num_var
@@ -272,6 +277,45 @@ class QCCMamba(nn.Module):
             raise ValueError("qmix/spectrum_inject/head_agg 需要默认 SMambaBackbone（自定义 backbone 无插值点）")
         self.backbone = backbone
 
+        # QK-Path（2026-08-15）：量子核独立预测通道 —— 主干保持 plain 最强形态，
+        # 量子核在预测头端独立出预测 y_qk，与 y_main 融合：y = y_main + γ·y_qk。
+        # 与"改表示"路线（qmix 注入/双路径融合）的本质区别：量子核有自己的预测目标和
+        # 梯度路径（K 坍缩直接伤害自己的预测），不存在"被主干吸收"的梯度路径。
+        # el 诊断（2026-08-15）：保真度核编码坍缩（offdiag_std 0.009）丢结构，
+        # rbf/有向核保留坐标/相位信息有选择性（std 0.8/赢面）——kernel_fn 可换。
+        self.qk_mix = None
+        self.qk_head = None
+        self.qk_gate = None
+        if qk_path:
+            if not (use_spectrum and use_S):
+                raise ValueError("qk_path=True 需要 use_spectrum=True 且 use_S=True")
+            self.qk_mix = QuantumMixLayer(
+                d_token=d_token,
+                n_qubits=n_qubits,
+                n_layers=n_layers,
+                M=spectrum_M,
+                entangle_topo=entangle_topo,
+                kernel_fn=kernel_fn,
+                use_fmap=use_fmap,
+                theta_S_scale0=theta_S_scale0,
+                pre_norm=True,
+                use_H=qk_use_H,   # False: K 纯 S 驱动（频谱结构，避免与主干 H 重合）
+                use_S=True,
+                reupload_source="S",
+                angle_norm=angle_norm,
+                angle_radius=angle_radius,
+                norm_type=qk_norm,
+                output_mode="raw",   # 返回 LN(K_n @ (H@W_q)), K
+                kernel_T=kernel_T,
+                topk=topk,
+                offdiag=offdiag,
+                gate=False,
+                delay_in_s=delay_in_s,
+            )
+            self.qk_head = nn.Linear(d_token, horizon, bias=True)
+            # 名字含 gate_raw → build_optimizer 自动放入门控组（gate_lr 生效）
+            self._qk_gate_raw = nn.Parameter(torch.full((), float(qk_gate_init)))
+
         # 辅助残差损失（qdir_aux，2026-08-13）：给量子混合分支直接学习目标
         # L = MSE(y, y_true) + β·MSE(aux_head(LN(Hp)), (y_true - y_main).detach())
         # 目的：Hp 学会指向残差 → γ 门控才有关联信号可开（端到端梯度弱的老问题）
@@ -319,6 +363,15 @@ class QCCMamba(nn.Module):
         out = self.backbone(x_in, S=S)
         H, y_norm, K = out.H, out.y_main, out.K  # (B, V, d), (B, H, V), (B, V, V)
         self._last_qmix_out = out.qmix_out  # (B, V, d) 或 None（aux 损失用）
+
+        # QK-Path：量子核独立预测通道（norm 空间融合，γ=0 → 精确 plain）
+        if self.qk_mix is not None and S is not None:
+            Hagg, K_qk = self.qk_mix(H, S)                     # (B, V, d), (B, V, V)
+            y_qk = self.qk_head(Hagg).transpose(1, 2)          # (B, horizon, V)
+            g = self._qk_gate_raw.clamp(0.0, 2.0)
+            y_norm = y_norm + g * y_qk
+            K = K_qk  # 核统计/K 监督用 qk 的 K
+
         self._last_K = K                     # (B, V, V) 或 None（核监督用）
         self._last_x_norm = x_norm           # (B, L, V)（核监督目标用）
 

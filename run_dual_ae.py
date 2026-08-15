@@ -182,6 +182,11 @@ def main():
         dp_var_embed=model_cfg.get('dp_var_embed', True),
         dp_msg=model_cfg.get('dp_msg', 'S'),
         dp_fusion=model_cfg.get('dp_fusion', 'add'),
+        # QK-Path（2026-08-15）：量子核独立预测通道
+        qk_path=model_cfg.get('qk_path', False),
+        qk_gate_init=model_cfg.get('qk_gate_init', 0.05),
+        qk_use_H=model_cfg.get('qk_use_H', False),
+        qk_norm=model_cfg.get('qk_norm', 'softmax'),
     )
     model = model.to(device)
 
