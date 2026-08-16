@@ -100,6 +100,8 @@ if __name__ == '__main__':
     parser.add_argument('--angle_norm', type=str, default='clamp', help='angle normalization: clamp | sphere')
     parser.add_argument('--theta_S_scale0', type=float, default=0.5, help='initial S-modulation strength gamma')
     parser.add_argument('--qmix_gate', action='store_true', help='learnable gate (gamma=0 -> output==input)')
+    parser.add_argument('--qmix_use_H', type=int, default=1, help='K reads H (1) or spectrum S only (0, P1-1)')
+    parser.add_argument('--qmix_fixed_s_scale', action='store_true', help='P1-1b: S enters fmap at fixed scale (un-suppressible)')
     parser.add_argument('--qmix_gate_init', type=float, default=0.0, help='initial gate value')
     parser.add_argument('--spectrum_M', type=int, default=32, help='spectrum resample points M (S dim = 2M, or 2M+1 with delay_in_s)')
     parser.add_argument('--spectrum_time_align', action='store_true', help='time-axis alignment via FFT cross-correlation')

@@ -78,6 +78,7 @@ class QuantumMixLayer(nn.Module):
         gate_init: float = 0.0,
         hp_scale: float = 1.0,
         delay_in_s: bool = False,
+        fixed_s_scale: bool = False,  # P1-1b: S 固定尺度进 fmap（不可压制）
     ):
         """消息传递归一化与输出模式（2026-08-11 晚，运输修复；2026-08-12 选择性修复）。
 
@@ -159,6 +160,7 @@ class QuantumMixLayer(nn.Module):
         # S 路调制强度 γ（可学习标量，init=0.5, clamp [0.1, 2]）
         if use_S:
             self._gamma_raw = nn.Parameter(torch.tensor(_inv_softplus(theta_S_scale0)))
+            self.fixed_s_scale = fixed_s_scale
             # P0-1: delay_in_s 时 S 多 1 维 δ̂ 时滞通道
             self.s_ln = nn.LayerNorm(2 * M + (1 if delay_in_s else 0))
 
@@ -197,7 +199,11 @@ class QuantumMixLayer(nn.Module):
             H_in = self.pre_ln(H.float()) if self.pre_norm else H.float()
             if self.use_fmap:
                 if self.use_S and S is not None:
-                    S_scaled = self.gamma * self.s_ln(S.float())  # γ 调制
+                    if self.fixed_s_scale:
+                        # P1-1b: 固定尺度归一化（按变量行 max），去掉可学习 γ/s_ln —— 优化器无法压塌
+                        S_scaled = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
+                    else:
+                        S_scaled = self.gamma * self.s_ln(S.float())  # γ 调制
                 else:
                     S_scaled = None
                 psi = self.fmap(H_in, S_scaled)

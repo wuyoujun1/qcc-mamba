@@ -41,7 +41,7 @@ class Model(_S_Mamba):
                     use_fmap=True,
                     theta_S_scale0=configs.theta_S_scale0,
                     pre_norm=True,
-                    use_H=True,
+                    use_H=bool(configs.qmix_use_H),
                     use_S=True,
                     reupload_source="S",
                     angle_norm=configs.angle_norm,
@@ -55,6 +55,7 @@ class Model(_S_Mamba):
                     gate_init=configs.qmix_gate_init,
                     hp_scale=1.0,
                     delay_in_s=configs.delay_in_s,
+                    fixed_s_scale=bool(getattr(configs, "qmix_fixed_s_scale", False)),
                 ) for _ in range(q)
             ])
             self._last_K = None  # (B, V, V) 诊断用
