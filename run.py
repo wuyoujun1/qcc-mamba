@@ -87,6 +87,26 @@ if __name__ == '__main__':
     parser.add_argument('--partial_start_index', type=int, default=0, help='the start index of variates for partial training, '
                                                                            'you can select [partial_start_index, min(enc_in + partial_start_index, N)]')
     parser.add_argument('--d_state', type=int, default=32, help='parameter of Mamba Block')
+    # Q-S-Mamba（量子混合，qcc 移植）-- qmix_layers=0 保持官方 S-Mamba 行为
+    parser.add_argument('--qmix_layers', type=int, default=0, help='quantum mix layers after encoder layers (0 = official S-Mamba)')
+    parser.add_argument('--n_qubits', type=int, default=2, help='number of qubits N (state dim 2^N)')
+    parser.add_argument('--qmix_n_layers', type=int, default=2, help='data-reupload layers D of quantum feature map')
+    parser.add_argument('--qmix_norm', type=str, default='avg', help='message-passing norm: avg | softmax | l1')
+    parser.add_argument('--kernel_T', type=float, default=1.0, help='fidelity kernel temperature T (softmax(K/T))')
+    parser.add_argument('--offdiag', action='store_true', help='softmax on (K - I) off-diagonal weights')
+    parser.add_argument('--topk', type=int, default=0, help='top-k couplings per row renormalized (0 = off)')
+    parser.add_argument('--entangle_topo', type=str, default='linear', help='entanglement topology: linear | ring | none')
+    parser.add_argument('--kernel_fn', type=str, default='quantum', help='kernel: quantum | rbf | periodic | rff | linear_imag | linear_real | none')
+    parser.add_argument('--angle_norm', type=str, default='clamp', help='angle normalization: clamp | sphere')
+    parser.add_argument('--theta_S_scale0', type=float, default=0.5, help='initial S-modulation strength gamma')
+    parser.add_argument('--qmix_gate', action='store_true', help='learnable gate (gamma=0 -> output==input)')
+    parser.add_argument('--qmix_gate_init', type=float, default=0.0, help='initial gate value')
+    parser.add_argument('--spectrum_M', type=int, default=32, help='spectrum resample points M (S dim = 2M, or 2M+1 with delay_in_s)')
+    parser.add_argument('--spectrum_time_align', action='store_true', help='time-axis alignment via FFT cross-correlation')
+    parser.add_argument('--spectrum_freq_align', action='store_true', help='frequency-axis alignment via peak-frequency resample')
+    parser.add_argument('--spectrum_range', type=str, default='0_2', help='resample range: 0_2 | 0_1')
+    parser.add_argument('--spectrum_amp_normalize', action='store_true', help='amplitude normalization A/A_max')
+    parser.add_argument('--delay_in_s', action='store_true', help='append time-shift delta_hat to S (S dim 2M+1)')
 
     args = parser.parse_args()
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
