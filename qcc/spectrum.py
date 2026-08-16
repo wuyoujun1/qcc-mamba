@@ -142,17 +142,11 @@ class SpectrumFeature(nn.Module):
         x_sum = x.sum(dim=-1, keepdim=True)  # (B, L, 1)
         ref = (x_sum - x) / (V - 1)  # (B, L, V) 留一均值
 
-        # 去均值互相关（2026-08-15 修复）：raw 互相关受均值/趋势主导，argmax 几乎
-        # 总在 τ=0（pems_bay/exchange 实测 δ̂ 全 0，真实时滞被掩盖）。去均值是
-        # 标准互相关第一步，让 δ̂ 反映真实滞后结构。
-        x_c = x - x.mean(dim=1, keepdim=True)
-        ref_c = ref - ref.mean(dim=1, keepdim=True)
-
-        # 互相关（频域加速）
-        # corr[b, v, τ] = Σ_t x_c[b, t, v] * ref_c[b, t+τ, v]
-        # 用 FFT 加速：corr = IFFT(FFT(x_c) * conj(FFT(ref_c)))
-        x_fft = torch.fft.rfft(x_c, dim=1, n=2*L)  # (B, 2L, V)
-        ref_fft = torch.fft.rfft(ref_c, dim=1, n=2*L)  # (B, 2L, V)
+        # 归一化互相关（频域加速）
+        # corr[b, v, τ] = Σ_t x[b, t, v] * ref[b, t+τ, v]
+        # 用 FFT 加速：corr = IFFT(FFT(x) * conj(FFT(ref)))
+        x_fft = torch.fft.rfft(x, dim=1, n=2*L)  # (B, 2L, V)
+        ref_fft = torch.fft.rfft(ref, dim=1, n=2*L)  # (B, 2L, V)
         corr = torch.fft.irfft(x_fft * ref_fft.conj(), dim=1, n=2*L)  # (B, 2L, V)
 
         # 双向搜索 [-MAX_LAG, MAX_LAG]
