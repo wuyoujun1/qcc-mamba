@@ -97,6 +97,7 @@ class EntanglingFeatureMap(nn.Module):
         angle_norm: str = "clamp",
         angle_radius: float = 1.0,
         delay_in_s: bool = False,
+        s_input_dim: int | None = None,  # 多组角度桥接：覆盖默认 2M(+1) 的 S 输入维度
     ):
         super().__init__()
         if entangle_topo not in self.SUPPORTED_TOPO:
@@ -123,6 +124,7 @@ class EntanglingFeatureMap(nn.Module):
         self.reupload_source = reupload_source
         self.angle_norm = angle_norm
         self.angle_radius = angle_radius
+        self.s_input_dim = s_input_dim  # 多组角度桥接：覆盖默认 S 输入维度
 
         # 每 qubit 2 角度（RZ·RY 完整 Bloch 球）
         self.angles_per_qubit = 2
@@ -142,7 +144,9 @@ class EntanglingFeatureMap(nn.Module):
 
         # proj_S: 频谱特征 → 重上传角度（P0-1: delay_in_s 时 S 多 1 维 δ̂）
         if use_S:
-            self.proj_S = nn.Linear(2 * M + (1 if delay_in_s else 0), self.required_dim, bias=True)
+            if s_input_dim is None:
+                s_input_dim = 2 * M + (1 if delay_in_s else 0)
+            self.proj_S = nn.Linear(s_input_dim, self.required_dim, bias=True)
             nn.init.xavier_uniform_(self.proj_S.weight)
             if self.proj_S.bias is not None:
                 nn.init.zeros_(self.proj_S.bias)
@@ -198,12 +202,12 @@ class EntanglingFeatureMap(nn.Module):
         """
         psi = psi.unflatten(-1, [2] * self.N)  # (B, V, 2, 2, ..., 2)
         target_dim = -(self.N - qubit)
-        psi = torch.movedim(psi, target_dim, -1)
+        psi = torch.movedim(psi, target_dim, -1).contiguous()  # 修复：movedim 后确保连续
         n_extra = psi.dim() - gate.dim()
         if n_extra > 0:
             gate = gate.view(gate.shape[0], gate.shape[1], *([1] * n_extra), 2, 2)
         psi = torch.matmul(gate, psi)
-        psi = torch.movedim(psi, -1, target_dim)
+        psi = torch.movedim(psi, -1, target_dim).contiguous()  # 修复：movedim 后确保连续
         return psi.flatten(-self.N)  # (B, V, 2^N)
 
     # ------------------------------------------------------------------ #

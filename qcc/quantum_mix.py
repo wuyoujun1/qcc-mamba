@@ -79,6 +79,9 @@ class QuantumMixLayer(nn.Module):
         hp_scale: float = 1.0,
         delay_in_s: bool = False,
         fixed_s_scale: bool = False,  # P1-1b: S 固定尺度进 fmap（不可压制）
+        amplitude_encoding: bool = False,  # 第四轮：振幅编码（零信息损失）
+        angle_groups: int = 1,  # 第五轮：多组角度桥接（把 2M 维 S 拆 G 组，每组独立 2N 角度）
+        kernel_group_agg: str = "product",  # 多组核聚合: product | mean
     ):
         """消息传递归一化与输出模式（2026-08-11 晚，运输修复；2026-08-12 选择性修复）。
 
@@ -115,6 +118,13 @@ class QuantumMixLayer(nn.Module):
         self.offdiag = offdiag
         self.gate = gate
         self.hp_scale = hp_scale
+        self.amplitude_encoding = amplitude_encoding
+        self.angle_groups = int(angle_groups)
+        self.kernel_group_agg = kernel_group_agg
+        if self.angle_groups < 1:
+            raise ValueError(f"angle_groups must be >= 1, got {angle_groups}")
+        if kernel_group_agg not in ("product", "mean"):
+            raise ValueError(f"kernel_group_agg must be 'product' or 'mean', got {kernel_group_agg}")
         if norm_type not in ("avg", "softmax", "l1"):
             raise ValueError(f"norm_type must be 'avg' or 'softmax' or 'l1', got {norm_type}")
         if output_mode not in ("residual", "raw"):
@@ -128,6 +138,60 @@ class QuantumMixLayer(nn.Module):
             self.pre_ln = nn.LayerNorm(d_token)
 
         if use_fmap:
+            # 第三轮改进：更深的 S 投影网络
+            deep_s_proj = getattr(self, '_deep_s_proj', False)
+            if deep_s_proj:
+                # 多层 MLP 替代单层线性
+                s_input_dim = 2 * M + (1 if delay_in_s else 0)
+                s_hidden_dim = n_qubits * 4  # 中间层维度
+                self._deep_s_proj_net = nn.Sequential(
+                    nn.Linear(s_input_dim, s_hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(s_hidden_dim, n_qubits * 2),  # 输出 2N 维（N 实部 + N 虚部）
+                )
+                # 初始化
+                for m in self._deep_s_proj_net:
+                    if isinstance(m, nn.Linear):
+                        nn.init.xavier_uniform_(m.weight)
+                        if m.bias is not None:
+                            nn.init.zeros_(m.bias)
+            else:
+                self._deep_s_proj_net = None
+
+            # 多组角度桥接（第五轮）：把 S 拆 G 组，每组独立 fmap + 独立 2N 角度。
+            # 单组 2N 角度是瓶颈（64 维 S → 2N 维角度信息被压）；G 组 → 总角度 G·2N，
+            # 每组只吃 S 的 1/G 切片，proj_S: (2M/G) → 2N，缓解单组压缩。
+            # delay_in_s 的 δ̂ 通道不参与分组（1 维无法整除），作为公共特征附加到每组。
+            if self.angle_groups > 1 and use_S:
+                s_core_dim = 2 * M  # 频谱部分
+                if s_core_dim % self.angle_groups != 0:
+                    raise ValueError(
+                        f"S core dim {s_core_dim} not divisible by angle_groups {self.angle_groups}"
+                    )
+                self.group_s_dim = s_core_dim // self.angle_groups + (1 if delay_in_s else 0)
+                self.group_fmaps = nn.ModuleList(
+                    [
+                        EntanglingFeatureMap(
+                            n_qubits=n_qubits,
+                            n_layers=n_layers,
+                            d_token=d_token,
+                            M=M,
+                            entangle_topo=entangle_topo,
+                            use_H=use_H,
+                            use_S=use_S,
+                            reupload_source=reupload_source,
+                            angle_norm=angle_norm,
+                            angle_radius=angle_radius,
+                            delay_in_s=False,  # δ̂ 已并入分组切片
+                            s_input_dim=self.group_s_dim,
+                        )
+                        for _ in range(self.angle_groups)
+                    ]
+                )
+            else:
+                self.group_fmaps = None
+                self.group_s_dim = 0
+
             self.fmap = EntanglingFeatureMap(
                 n_qubits=n_qubits,
                 n_layers=n_layers,
@@ -164,6 +228,14 @@ class QuantumMixLayer(nn.Module):
             # P0-1: delay_in_s 时 S 多 1 维 δ̂ 时滞通道
             self.s_ln = nn.LayerNorm(2 * M + (1 if delay_in_s else 0))
 
+        # 振幅编码投影层（第四轮：零信息损失）
+        if amplitude_encoding and use_S:
+            s_dim = 2 * M + (1 if delay_in_s else 0)
+            target_dim = 2 ** n_qubits
+            self.amp_proj = nn.Linear(s_dim, target_dim, bias=False)
+            # Xavier 初始化
+            nn.init.xavier_uniform_(self.amp_proj.weight)
+
     @property
     def gate_value(self) -> torch.Tensor:
         """混合门控强度（γ=0 → H' ≡ H，架构等于 plain）。"""
@@ -183,22 +255,80 @@ class QuantumMixLayer(nn.Module):
         self,
         H: torch.Tensor,
         S: Optional[torch.Tensor] = None,
+        use_S_only: bool = False,  # P1-1: 量子核直接读频谱 S（不读主干 H）
     ):
         """量子核跨变量混合：H' = LN(H + (1/V)·K·H·W_q)。
 
         Args:
             H: (B, V, d) 变量 token。
             S: (B, V, 2M) 对齐频谱特征（use_S=True 时必须提供）。
+            use_S_only: P1-1 模式，量子核直接读频谱 S（不读主干 H）。
 
         Returns:
             H': (B, V, d) 混合后 token。
             K: (B, V, V) 保真度核矩阵（供可解释性分析）。
         """
+        # 安全检查：检测 CUDA 错误
+        if H.device.type == 'cuda':
+            torch.cuda.synchronize()
+
         # 量子路径必须在 fp32 下运行：AMP 下复数张量变 ComplexHalf，CUDA 不支持
         with torch.autocast(device_type=H.device.type, enabled=False):
             H_in = self.pre_ln(H.float()) if self.pre_norm else H.float()
-            if self.use_fmap:
-                if self.use_S and S is not None:
+
+            # 第四轮：振幅编码（零信息损失，避免复数运算）
+            if self.amplitude_encoding and use_S_only and S is not None:
+                # S 归一化
+                if self.fixed_s_scale:
+                    S_scaled = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
+                else:
+                    S_scaled = self.gamma * self.s_ln(S.float())
+
+                # 振幅编码：线性投影 + L2 归一化（实数向量，不用复数）
+                psi = self.amp_proj(S_scaled)  # (B, V, 2^N)
+                psi = psi / (psi.norm(dim=-1, keepdim=True) + 1e-8)  # L2 归一化
+
+                # 量子保真度核：K[i,j] = |<psi_i|psi_j>|^2 = (psi_i · psi_j)^2
+                # 实数内积，避免复数 einsum
+                inner = torch.matmul(psi, psi.transpose(-1, -2))  # (B, V, V)
+                K = inner ** 2  # 保真度
+            elif self.use_fmap:
+                if use_S_only and S is not None:
+                    # P1-1: 量子核直接读频谱 S（不读主干 H）
+                    # 让量子核编码主干拿不到的频域结构
+                    if self.fixed_s_scale:
+                        S_scaled = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
+                    else:
+                        S_scaled = self.gamma * self.s_ln(S.float())
+                    # 用 S 投影到量子态（不经过 fmap，直接用 proj_S）
+                    angles = self.fmap.proj_S(S_scaled)  # (B, V, 2N)
+                    # 角度归一化
+                    if self.fmap.angle_norm == "clamp":
+                        angles = angles.clamp(-math.pi, math.pi)
+                    elif self.fmap.angle_norm == "sphere":
+                        angles = angles / (angles.norm(dim=-1, keepdim=True) + 1e-8) * self.fmap.angle_radius
+                    # 构造 N 个 qubit 的乘积态
+                    N = self.fmap.N
+                    # angles: (B, V, 2N) -> (B, V, N, 2) [theta, phi for each qubit]
+                    angles = angles.view(*angles.shape[:-1], N, 2)
+                    theta = angles[..., 0]  # (B, V, N) RY 角度
+                    phi = angles[..., 1]    # (B, V, N) RZ 角度
+                    # 单个 qubit 态: |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)sin(θ/2)|1⟩
+                    c = torch.cos(theta / 2)  # (B, V, N)
+                    s = torch.sin(theta / 2)  # (B, V, N)
+                    # 构造 (B, V, N, 2) 复数态
+                    psi_single = torch.stack([
+                        c,
+                        s * torch.exp(1j * phi.to(torch.cfloat))
+                    ], dim=-1)  # (B, V, N, 2)
+                    # Tensor product: N 个 qubit -> 2^N 维
+                    psi = psi_single[..., 0, :]  # (B, V, 2) 第一个 qubit
+                    for i in range(1, N):
+                        psi = torch.einsum('...i,...j->...ij', psi, psi_single[..., i, :])
+                        psi = psi.view(*psi.shape[:-2], -1)  # flatten
+                    # 归一化
+                    psi = psi / (psi.norm(dim=-1, keepdim=True) + 1e-8)
+                elif self.use_S and S is not None:
                     if self.fixed_s_scale:
                         # P1-1b: 固定尺度归一化（按变量行 max），去掉可学习 γ/s_ln —— 优化器无法压塌
                         S_scaled = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
@@ -206,10 +336,36 @@ class QuantumMixLayer(nn.Module):
                         S_scaled = self.gamma * self.s_ln(S.float())  # γ 调制
                 else:
                     S_scaled = None
-                psi = self.fmap(H_in, S_scaled)
-                K = self.kernel_fn(psi)
+                if not use_S_only:
+                    if self.group_fmaps is not None:
+                        # 多组角度桥接：频谱 2M 切成 G 块；δ̂（如有）附加到每组
+                        s_core = S_scaled[..., : 2 * self.fmap.M]
+                        delay = S_scaled[..., 2 * self.fmap.M :] if self.fmap.M * 2 < S_scaled.shape[-1] else None
+                        s_chunks = torch.chunk(s_core, self.angle_groups, dim=-1)
+                        if delay is not None:
+                            s_chunks = [torch.cat([c, delay], dim=-1) for c in s_chunks]
+                        K = None
+                        for fm, s_chunk in zip(self.group_fmaps, s_chunks):
+                            psi_g = fm(H_in, s_chunk)  # (B, V, 2^N)
+                            K_g = self.kernel_fn(psi_g)  # (B, V, V)
+                            if K is None:
+                                K = K_g
+                            elif self.kernel_group_agg == "product":
+                                K = K * K_g
+                            else:
+                                K = K + K_g
+                        if self.kernel_group_agg == "mean":
+                            K = K / self.angle_groups
+                    else:
+                        psi = self.fmap(H_in, S_scaled)
+                        K = self.kernel_fn(psi)
             else:
                 K = self.kernel_fn(H_in)
+
+            # 安全检查：feature map 后检测 CUDA 错误
+            if H.device.type == 'cuda':
+                torch.cuda.synchronize()
+
             HW = torch.einsum("bvd,de->bve", H_in, self.W_q.weight)
             if self.norm_type == "softmax":
                 # GAT 式行归一化：K[v,:] 和为 1，Hp 幅度 ≈ H，跨变量信号不被 1/V 稀释

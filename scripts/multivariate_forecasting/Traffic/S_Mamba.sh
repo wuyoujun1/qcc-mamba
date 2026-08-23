@@ -21,7 +21,8 @@ python -u run.py \
   --d_ff 512 \
   --batch_size 16 \
   --learning_rate 0.001 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -42,7 +43,8 @@ python -u run.py \
   --d_ff 512 \
   --batch_size 16 \
   --learning_rate 0.001 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -63,7 +65,8 @@ python -u run.py \
   --d_ff 512 \
   --batch_size 16 \
   --learning_rate 0.002 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -85,4 +88,5 @@ python -u run.py \
   --d_ff 512 \
   --batch_size 16 \
   --learning_rate 0.0008\
-  --itr 1
+  --itr 1 \
+  --num_workers 2

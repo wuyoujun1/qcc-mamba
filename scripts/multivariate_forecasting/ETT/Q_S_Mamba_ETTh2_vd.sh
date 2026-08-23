@@ -22,7 +22,7 @@ python -u run.py \
   --d_state 2 \
   --learning_rate 0.00004 \
   --itr 1 \
-  --num_workers 2
+  --num_workers 2 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \
@@ -58,7 +58,7 @@ python -u run.py \
   --d_state 2 \
   --learning_rate 0.00004 \
   --itr 1 \
-  --num_workers 2
+  --num_workers 2 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \
@@ -94,7 +94,7 @@ python -u run.py \
   --d_state 2 \
   --learning_rate 0.00003 \
   --itr 1 \
-  --num_workers 2
+  --num_workers 2 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \
@@ -130,7 +130,7 @@ python -u run.py \
   --d_state 2 \
   --learning_rate 0.00007 \
   --itr 1 \
-  --num_workers 2
+  --num_workers 2 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \

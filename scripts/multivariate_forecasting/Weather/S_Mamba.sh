@@ -22,7 +22,8 @@ python -u run.py \
   --train_epochs 5\
   --d_state 2 \
   --d_ff 512\
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 
 python -u run.py \
@@ -45,7 +46,8 @@ python -u run.py \
   --d_model 512\
   --d_state 2 \
   --d_ff 512\
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 
 python -u run.py \
@@ -68,7 +70,8 @@ python -u run.py \
   --d_model 512\
   --d_state 2 \
   --d_ff 512\
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 
 python -u run.py \
@@ -91,4 +94,5 @@ python -u run.py \
   --d_model 512\
   --d_state 2 \
   --d_ff 512\
-  --itr 1
+  --itr 1 \
+  --num_workers 2

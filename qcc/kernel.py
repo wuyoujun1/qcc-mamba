@@ -25,7 +25,9 @@ def quantum_kernel(psi: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
         核矩阵，形状 (B, V, V) 实数，值域 [0, 1]。
     """
     if psi.is_complex():
-        inner = torch.einsum("bvi,bwi->bvw", psi.conj(), psi)
+        # 修复：clone 共轭视图，避免 einsum 反向传播时的内存共享问题
+        psi_conj = psi.conj().clone()
+        inner = torch.einsum("bvi,bwi->bvw", psi_conj, psi)
     else:
         # 实数回退：直接内积
         inner = torch.einsum("bvi,bwi->bvw", psi, psi)
@@ -52,7 +54,9 @@ def linear_overlap_kernel(psi: torch.Tensor, mode: str = "imag") -> torch.Tensor
     - 均值 0、相对波动 O(1) → 无保真度在 2^N 维的浓度问题（diag=1 主导 / softmax 均匀化）
     - 对角线 Im=0 → 恒等映射问题天然不存在，无需 offdiag 补丁
     """
-    inner = torch.einsum("bvi,bwi->bvw", psi.conj(), psi)
+    # 修复：clone 共轭视图，避免 einsum 反向传播时的内存共享问题
+    psi_conj = psi.conj().clone()
+    inner = torch.einsum("bvi,bwi->bvw", psi_conj, psi)
     if mode == "imag":
         return inner.imag
     if mode == "real":

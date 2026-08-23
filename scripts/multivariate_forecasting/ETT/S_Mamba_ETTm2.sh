@@ -21,7 +21,8 @@ python -u run.py \
   --d_ff 256 \
   --d_state 2 \
   --learning_rate 0.00005 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -42,7 +43,8 @@ python -u run.py \
   --d_state 2 \
   --learning_rate 0.00005 \
   --d_ff 128 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -63,7 +65,8 @@ python -u run.py \
   --d_state 2 \
   --learning_rate 0.00003 \
   --d_ff 128 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -84,4 +87,5 @@ python -u run.py \
   --d_state 2 \
   --learning_rate 0.00005 \
   --d_ff 128 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2

@@ -1,8 +1,10 @@
 export CUDA_VISIBLE_DEVICES=0
 
+PYTHON=/home/wuyoujun/qcc-mamba/.venv/bin/python
+export PATH=/home/wuyoujun/qcc-mamba/.venv/bin:$PATH
 model_name=Q_S_Mamba
 # d state 2
-python -u run.py \
+$PYTHON -u run.py \
   --is_training 1 \
   --root_path ./dataset/ETT-small/ \
   --data_path ETTh1.csv \
@@ -21,7 +23,7 @@ python -u run.py \
   --d_state 2\
   --d_ff 256 \
   --itr 1 \
-  --learning_rate 0.00007
+  --learning_rate 0.00007 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \
@@ -37,7 +39,7 @@ python -u run.py \
   --spectrum_range 0_2 \
   --delay_in_s
 
-python -u run.py \
+$PYTHON -u run.py \
   --is_training 1 \
   --root_path ./dataset/ETT-small/ \
   --data_path ETTh1.csv \
@@ -56,7 +58,7 @@ python -u run.py \
   --d_state 2 \
   --d_ff 256 \
   --itr 1 \
-  --learning_rate 0.00007
+  --learning_rate 0.00007 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \
@@ -72,7 +74,7 @@ python -u run.py \
   --spectrum_range 0_2 \
   --delay_in_s
 
-python -u run.py \
+$PYTHON -u run.py \
   --is_training 1 \
   --root_path ./dataset/ETT-small/ \
   --data_path ETTh1.csv \
@@ -91,7 +93,7 @@ python -u run.py \
   --d_state 2 \
   --d_ff 256 \
   --itr 1 \
-  --learning_rate 0.00005
+  --learning_rate 0.00005 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \
@@ -107,7 +109,7 @@ python -u run.py \
   --spectrum_range 0_2 \
   --delay_in_s
 
-python -u run.py \
+$PYTHON -u run.py \
   --is_training 1 \
   --root_path ./dataset/ETT-small/ \
   --data_path ETTh1.csv \
@@ -126,7 +128,7 @@ python -u run.py \
   --d_state 2 \
   --d_ff 256 \
   --itr 1 \
-  --learning_rate 0.00005
+  --learning_rate 0.00005 \
   --qmix_layers 2 \
   --n_qubits 2 \
   --qmix_n_layers 2 \

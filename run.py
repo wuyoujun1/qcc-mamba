@@ -109,6 +109,22 @@ if __name__ == '__main__':
     parser.add_argument('--spectrum_range', type=str, default='0_2', help='resample range: 0_2 | 0_1')
     parser.add_argument('--spectrum_amp_normalize', action='store_true', help='amplitude normalization A/A_max')
     parser.add_argument('--delay_in_s', action='store_true', help='append time-shift delta_hat to S (S dim 2M+1)')
+    parser.add_argument('--hp_scale_v', action='store_true', help='hp_scale = 7/V (auto-adapt to variable count)')
+    parser.add_argument('--qmix_use_S_only', action='store_true', help='P1-1: quantum kernel reads S only (not H)')
+    parser.add_argument('--qmix_amplitude_encoding', action='store_true', help='第四轮：振幅编码（零信息损失）')
+    # 第五轮：多组角度桥接（不用振幅编码）
+    parser.add_argument('--angle_groups', type=int, default=1, help='多组角度桥接：把 2M 维 S 拆 G 组，每组独立 2N 角度')
+    parser.add_argument('--kernel_group_agg', type=str, default='product', help='多组核聚合: product | mean')
+
+    # P2-1 双路径（2026-08-17）：时间 SSM 单向 + 量子核独占跨变量
+    parser.add_argument('--dp_time_layers', type=int, default=2, help='time path SSM layers')
+    parser.add_argument('--dp_time_dim', type=int, default=256, help='time path hidden dim')
+    parser.add_argument('--dp_time_pool', type=str, default='mean', help='time pool: mean | last')
+    parser.add_argument('--dp_var_embed', type=int, default=1, help='per-variable identity embedding')
+    parser.add_argument('--dp_msg', type=str, default='S', help='var-path message source: S | H | both')
+    parser.add_argument('--dp_fusion', type=str, default='add', help='fusion: add | time_only (new plain baseline)')
+    parser.add_argument('--dp_gate_init', type=float, default=0.05, help='fusion gate init (gamma=0 -> H == H_time)')
+    parser.add_argument('--use_dp_feats', action='store_true', help='broadcast time features into TimePath')
 
     args = parser.parse_args()
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False

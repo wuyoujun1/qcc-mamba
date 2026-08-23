@@ -18,6 +18,10 @@ class Model(_S_Mamba):
         self.V = configs.enc_in  # 前 V 个 token 是变量（后续是时间特征 token）
         q = int(getattr(configs, "qmix_layers", 0))
         self.qmix_layers = q
+        # P1-1: 量子核直接读频谱 S（不读主干 H）
+        self.use_S_only = getattr(configs, "qmix_use_S_only", False)
+        # hp_scale: 7/V 归一化（旧仓库赢家关键）
+        hp_scale = 7.0 / configs.enc_in if getattr(configs, "hp_scale_v", False) else 1.0
         if q > 0:
             if q > configs.e_layers:
                 raise ValueError(f"qmix_layers={q} must be <= e_layers={configs.e_layers}")
@@ -53,7 +57,7 @@ class Model(_S_Mamba):
                     offdiag=configs.offdiag,
                     gate=configs.qmix_gate,
                     gate_init=configs.qmix_gate_init,
-                    hp_scale=1.0,
+                    hp_scale=hp_scale,
                     delay_in_s=configs.delay_in_s,
                     fixed_s_scale=bool(getattr(configs, "qmix_fixed_s_scale", False)),
                 ) for _ in range(q)
@@ -81,12 +85,14 @@ class Model(_S_Mamba):
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
 
         if self.qmix_layers > 0:
+            # P1-1: 量子核直接读频谱 S（不读主干 H）
+            use_S_only = getattr(self, 'use_S_only', False)
             # 手动循环官方 EncoderLayer（与 Encoder.forward 相同操作顺序）
             for i, layer in enumerate(self.encoder.attn_layers):
                 enc_out, _ = layer(enc_out, attn_mask=None)
                 if i < len(self.qmix):
                     enc_var = enc_out[:, :V, :]                     # (B, 7, d)
-                    enc_mixed, K = self.qmix[i](enc_var, S)          # (B, 7, d), (B, 7, 7)
+                    enc_mixed, K = self.qmix[i](enc_var, S, use_S_only=use_S_only)  # (B, 7, d), (B, 7, 7)
                     enc_out = torch.cat([enc_mixed, enc_out[:, V:, :]], dim=1)
                     self._last_K = K
                     self._last_S = S

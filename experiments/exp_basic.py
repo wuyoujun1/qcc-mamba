@@ -3,7 +3,7 @@ import torch
 from model import Transformer, Informer, Reformer, Flowformer, Flashformer, \
     iTransformer, iInformer, iReformer, iFlowformer, iFlashformer, S_Mamba, \
     Flashformer_M, Flowformer_M, Autoformer, Autoformer_M, Transformer_M, \
-    Informer_M, Reformer_M, Q_S_Mamba
+    Informer_M, Reformer_M, Q_S_Mamba, Q_S_Mamba_dp
 
 
 class Exp_Basic(object):
@@ -36,6 +36,7 @@ class Exp_Basic(object):
 
             'S_Mamba': S_Mamba,
             'Q_S_Mamba': Q_S_Mamba,
+            'Q_S_Mamba_dp': Q_S_Mamba_dp,
         }
         self.device = self._acquire_device()
         self.model = self._build_model().to(self.device)

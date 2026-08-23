@@ -139,15 +139,21 @@ class SpectrumFeature(nn.Module):
 
         # 计算留一均值（共识时钟）
         # ref[b, t] = (1/(V-1)) Σ_{j≠v} x[b, t, j]
+        # 优化：使用 in-place 操作减少内存峰值
         x_sum = x.sum(dim=-1, keepdim=True)  # (B, L, 1)
-        ref = (x_sum - x) / (V - 1)  # (B, L, V) 留一均值
+        ref = x_sum - x  # (B, L, V) 先不减，复用 x_sum
+        ref.div_(V - 1)  # in-place 除法
+        del x_sum  # 及时释放
 
         # 归一化互相关（频域加速）
         # corr[b, v, τ] = Σ_t x[b, t, v] * ref[b, t+τ, v]
         # 用 FFT 加速：corr = IFFT(FFT(x) * conj(FFT(ref)))
-        x_fft = torch.fft.rfft(x, dim=1, n=2*L)  # (B, 2L, V)
-        ref_fft = torch.fft.rfft(ref, dim=1, n=2*L)  # (B, 2L, V)
-        corr = torch.fft.irfft(x_fft * ref_fft.conj(), dim=1, n=2*L)  # (B, 2L, V)
+        # 优化：使用更小的 FFT 长度（L 而非 2L），减少内存 50%
+        x_fft = torch.fft.rfft(x, dim=1, n=L)  # (B, L//2+1, V)
+        ref_fft = torch.fft.rfft(ref, dim=1, n=L)  # (B, L//2+1, V)
+        del ref  # 及时释放
+        corr = torch.fft.irfft(x_fft * ref_fft.conj(), dim=1, n=L)  # (B, L, V)
+        del x_fft, ref_fft  # 及时释放
 
         # 双向搜索 [-MAX_LAG, MAX_LAG]
         # corr 的前 L 个元素对应 τ ∈ [0, L-1]
@@ -156,6 +162,7 @@ class SpectrumFeature(nn.Module):
         corr_pos = corr[:, :MAX_LAG+1, :]  # τ ∈ [0, MAX_LAG]
         corr_neg = corr[:, -MAX_LAG:, :]   # τ ∈ [-MAX_LAG, -1]
         corr_bidir = torch.cat([corr_neg, corr_pos], dim=1)  # (B, 2*MAX_LAG+1, V)
+        del corr, corr_pos, corr_neg  # 及时释放
 
         # 取峰值滞后
         tau_bidir = corr_bidir.argmax(dim=1)  # (B, V) 在 [-MAX_LAG, MAX_LAG] 中的索引
@@ -313,17 +320,23 @@ class SpectrumFeature(nn.Module):
         # 对 freq_tilde 按频率排序（每个样本、每个变量独立排序）
         # 排序后 freq_tilde 单调递增，便于插值
         sorted_idx = freq_tilde.argsort(dim=-1)  # (B, V, F)
-        freq_sorted = torch.gather(freq_tilde, dim=-1, index=sorted_idx)  # (B, V, F)
-        values_sorted = torch.gather(values, dim=-1, index=sorted_idx)  # (B, V, F)
+        freq_sorted = torch.gather(freq_tilde, dim=-1, index=sorted_idx).contiguous()
+        values_sorted = torch.gather(values, dim=-1, index=sorted_idx).contiguous()
+
+        # 修复：确保严格单调（消除重复值），防止 searchsorted CUDA 内核越界
+        # 重复频率会导致 searchsorted 二分查找行为未定义，可能触发 GPU 内存错误
+        eps = 1e-8
+        freq_diff = torch.diff(freq_sorted, dim=-1)
+        freq_diff = freq_diff.clamp(min=eps)
+        freq_sorted = freq_sorted.clone()
+        freq_sorted[..., 1:] = freq_sorted[..., :-1] + freq_diff
 
         # 对每个目标采样点，找到左右邻居并插值
-        # searchsorted 要求 target 前 N-1 维与 boundaries 匹配，广播到 (B, V, M)
         target = target_grid.view(1, 1, self.M).expand(B, V, self.M)  # (B, V, M)
 
         # 找到每个 target 在 freq_sorted 中的位置（左侧索引）
-        # searchsorted 要求 freq_sorted 单调递增
-        # freq_sorted: (B, V, F), target: (B, V, M)
-        # 输出: (B, V, M) 左侧索引
+        # 修复：使用 contiguous 的 target 避免 searchsorted 的非连续输入警告
+        target = target.contiguous()
         left_idx = torch.searchsorted(freq_sorted, target, right=False) - 1
         left_idx = left_idx.clamp(min=0, max=F - 2)  # 防止越界
 

@@ -21,7 +21,8 @@ python -u run.py \
   --batch_size 16\
   --learning_rate 0.0001 \
   --d_ff 128 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -41,7 +42,8 @@ python -u run.py \
   --d_model 128 \
   --learning_rate 0.0001 \
   --d_ff 128 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 
 python -u run.py \
   --is_training 1 \
@@ -81,4 +83,5 @@ python -u run.py \
   --learning_rate 0.00005 \
   --d_model 128 \
   --d_ff 128 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2

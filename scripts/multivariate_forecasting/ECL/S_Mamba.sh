@@ -22,7 +22,8 @@ python -u run.py \
   --train_epochs 5 \
   --batch_size 16 \
   --learning_rate 0.001 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/electricity/ \
@@ -43,7 +44,8 @@ python -u run.py \
   --batch_size 16 \
   --train_epochs 5 \
   --learning_rate 0.0005 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
   python -u run.py \
   --is_training 1 \
   --root_path ./dataset/electricity/ \
@@ -64,7 +66,8 @@ python -u run.py \
   --batch_size 16 \
   --train_epochs 5 \
   --learning_rate 0.0005 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
   python -u run.py \
   --is_training 1 \
   --root_path ./dataset/electricity/ \
@@ -85,4 +88,5 @@ python -u run.py \
   --train_epochs 5 \
   --batch_size 16 \
   --learning_rate 0.0005 \
-  --itr 1
+  --itr 1 \
+  --num_workers 2
