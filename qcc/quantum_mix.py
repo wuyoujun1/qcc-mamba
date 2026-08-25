@@ -24,7 +24,12 @@ import torch.nn as nn
 
 from .classical_kernels import make_kernel
 from .feature_map import EntanglingFeatureMap
-from .kernel import quantum_kernel
+from .joint_feature_map import JointEntanglingFeatureMap
+from .kernel import (
+    quantum_kernel,
+    quantum_reduced_kernel,
+    quantum_entanglement_kernel,
+)
 
 
 def _inv_softplus(target: float, lo: float = -20.0) -> float:
@@ -76,12 +81,24 @@ class QuantumMixLayer(nn.Module):
         offdiag: bool = False,
         gate: bool = False,
         gate_init: float = 0.0,
+        gate_per_var: bool = False,
+        gate_pv_init: float = 3.0,
+        gate_pv_src: bool = False,
+        gate_pv_src_init: float = -3.0,
         hp_scale: float = 1.0,
         delay_in_s: bool = False,
         fixed_s_scale: bool = False,  # P1-1b: S 固定尺度进 fmap（不可压制）
         amplitude_encoding: bool = False,  # 第四轮：振幅编码（零信息损失）
         angle_groups: int = 1,  # 第五轮：多组角度桥接（把 2M 维 S 拆 G 组，每组独立 2N 角度）
         kernel_group_agg: str = "product",  # 多组核聚合: product | mean
+        kernel_kappa: float = 1.0,  # quantum_exp 固定带宽 κ
+        kernel_power: float = 2.0,  # quantum_power 固定指数 p
+        kernel_exp_learn: bool = False,  # quantum_exp 带宽 κ 可学习（自调带宽）
+        kernel_power_learn: bool = False,  # quantum_power 指数 p 可学习
+        kernel_phase: float = 1.0,  # quantum_phase_exp 相位强度 λ
+        joint_encoding: bool = False,  # JEQK：跨变量纠缠联合编码（2026-08-24）
+        joint_topo: str = "var_linear",  # 联合纠缠拓扑 var_linear|var_ring|none
+        n_vars: int = 7,  # 变量数 V（联合编码用）
     ):
         """消息传递归一化与输出模式（2026-08-11 晚，运输修复；2026-08-12 选择性修复）。
 
@@ -121,6 +138,20 @@ class QuantumMixLayer(nn.Module):
         self.amplitude_encoding = amplitude_encoding
         self.angle_groups = int(angle_groups)
         self.kernel_group_agg = kernel_group_agg
+        self.joint_encoding = joint_encoding
+        self.n_qubits = n_qubits
+        self.n_vars = n_vars
+        self.kernel_kappa = kernel_kappa
+        self._last_K_norm = None  # QF-1: 归一化消息权重 K_n（softmax/offdiag 后），供对齐损失使用
+        # D2 纠缠耦合核（joint 分支专用）：kernel_fn=qmi/qent → 用 ρ_ij 纠缠核替代约化态相似度核
+        _kf0 = kernel_fn.lower() if isinstance(kernel_fn, str) else ""
+        self.joint_kernel_mode = {
+            "quantum_entangle": "mi",
+            "qmi": "mi",
+            "qent": "mi",
+            "quantum_entangle_hs": "hs_ent",
+            "qent_hs": "hs_ent",
+        }.get(_kf0)
         if self.angle_groups < 1:
             raise ValueError(f"angle_groups must be >= 1, got {angle_groups}")
         if kernel_group_agg not in ("product", "mean"):
@@ -206,10 +237,48 @@ class QuantumMixLayer(nn.Module):
                 delay_in_s=delay_in_s,  # P0-1: δ̂ 通道 → proj_S 输入 2M+1（此前漏传导致 65 维 S 崩溃）
             )
 
+            # JEQK：跨变量纠缠联合编码（2026-08-24）
+            if joint_encoding:
+                self.joint_fmap = JointEntanglingFeatureMap(
+                    n_qubits=n_qubits,
+                    n_vars=n_vars,
+                    n_layers=n_layers,
+                    d_token=d_token,
+                    M=M,
+                    entangle_topo=joint_topo,
+                    use_H=use_H,
+                    use_S=use_S,
+                    angle_norm=angle_norm,
+                    angle_radius=angle_radius,
+                    delay_in_s=delay_in_s,
+                )
+
         if kernel_fn is None:
             self.kernel_fn = quantum_kernel
         elif isinstance(kernel_fn, str):
-            self.kernel_fn = make_kernel(kernel_fn, d_token)
+            kf = kernel_fn.lower()
+            if kf in ("quantum_exp_pair", "qpair"):
+                # 每变量对可学习带宽（metric learning）：对齐损失能直接调 κ_ij
+                from .kernel import QuantumGeodesicPairwiseKernel
+                self.kernel_fn = QuantumGeodesicPairwiseKernel(self.n_vars, kappa0=kernel_kappa)
+            elif kf in ("quantum_exp", "qexp", "quantum_geodesic") and kernel_exp_learn:
+                # 可学习带宽版：κ 随训练自适应（rbf 固定 γ 做不到）
+                from .kernel import QuantumGeodesicKernel
+                self.kernel_fn = QuantumGeodesicKernel(kappa0=kernel_kappa)
+            elif kf in ("quantum_power", "qpow") and kernel_power_learn:
+                from .kernel import QuantumPowerKernel
+                self.kernel_fn = QuantumPowerKernel(power0=kernel_power)
+            elif kf in ("free", "free_couple"):
+                # D0a-v2：自由学习耦合矩阵（核轴天花板测试），非 joint 路径直接替换核
+                from .kernel import FreeCoupleKernel
+                self.kernel_fn = FreeCoupleKernel(self.n_vars)
+            elif self.joint_kernel_mode is not None:
+                # D2：joint 分支专用，核在 forward 按 joint_kernel_mode 计算，不走 make_kernel
+                self.kernel_fn = quantum_kernel  # 占位（joint 分支不调用 self.kernel_fn）
+            else:
+                self.kernel_fn = make_kernel(
+                    kf, d_token, kappa=kernel_kappa, power=kernel_power, phase=kernel_phase
+                )
         else:
             self.kernel_fn = kernel_fn
 
@@ -220,6 +289,21 @@ class QuantumMixLayer(nn.Module):
         # 混合门控 γ（可学习标量，init=gate_init（默认 0 → 输出 ≡ 输入），clamp [0, 2]）
         if gate:
             self._gate_raw = nn.Parameter(torch.full((), float(gate_init)))
+
+        # P2: 每变量消息门控（2026-08-24）：每个目标变量 v 学习是否接受跨变量消息。
+        # 大 V 弱耦合数据集（ECL/traffic）的 qmix 税 = K_n 近均匀 → Hp≈全局平均噪声；
+        # 每变量 sigmoid 门让独立变量学会关掉注入（gate_pv→0），耦合变量保留量子信号。
+        if gate and gate_per_var:
+            self.gate_per_var = True
+            self._gate_pv_raw = nn.Parameter(torch.full((int(n_vars),), float(gate_pv_init)))
+        else:
+            self.gate_per_var = False
+        # P2: 每源门控 —— 可学习 topk：每个源变量 w 是否参与跨变量消息（K 列选择性）
+        if gate and gate_pv_src:
+            self.gate_pv_src = True
+            self._gate_src_raw = nn.Parameter(torch.full((int(n_vars),), float(gate_pv_src_init)))
+        else:
+            self.gate_pv_src = False
 
         # S 路调制强度 γ（可学习标量，init=0.5, clamp [0.1, 2]）
         if use_S:
@@ -276,8 +360,28 @@ class QuantumMixLayer(nn.Module):
         with torch.autocast(device_type=H.device.type, enabled=False):
             H_in = self.pre_ln(H.float()) if self.pre_norm else H.float()
 
+            # JEQK：跨变量纠缠联合编码（2026-08-24）
+            if self.joint_encoding:
+                if S is not None:
+                    if self.fixed_s_scale:
+                        S_scaled = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
+                    else:
+                        S_scaled = self.gamma * self.s_ln(S.float())
+                else:
+                    S_scaled = None
+                psi_joint = self.joint_fmap(H_in, S_scaled)  # (B, 2^(V·nq))
+                if self.joint_kernel_mode is not None:
+                    # D2：直接度量 i-j 量子纠缠耦合（经典核拿不到的通道）
+                    K = quantum_entanglement_kernel(
+                        psi_joint, self.n_vars, self.n_qubits, self.kernel_kappa,
+                        self.joint_kernel_mode,
+                    )  # (B, V, V)
+                else:
+                    K = quantum_reduced_kernel(
+                        psi_joint, self.n_vars, self.n_qubits, self.kernel_kappa
+                    )  # (B, V, V)
             # 第四轮：振幅编码（零信息损失，避免复数运算）
-            if self.amplitude_encoding and use_S_only and S is not None:
+            elif self.amplitude_encoding and use_S_only and S is not None:
                 # S 归一化
                 if self.fixed_s_scale:
                     S_scaled = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
@@ -300,34 +404,16 @@ class QuantumMixLayer(nn.Module):
                         S_scaled = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
                     else:
                         S_scaled = self.gamma * self.s_ln(S.float())
-                    # 用 S 投影到量子态（不经过 fmap，直接用 proj_S）
-                    angles = self.fmap.proj_S(S_scaled)  # (B, V, 2N)
-                    # 角度归一化
-                    if self.fmap.angle_norm == "clamp":
-                        angles = angles.clamp(-math.pi, math.pi)
-                    elif self.fmap.angle_norm == "sphere":
-                        angles = angles / (angles.norm(dim=-1, keepdim=True) + 1e-8) * self.fmap.angle_radius
-                    # 构造 N 个 qubit 的乘积态
-                    N = self.fmap.N
-                    # angles: (B, V, 2N) -> (B, V, N, 2) [theta, phi for each qubit]
-                    angles = angles.view(*angles.shape[:-1], N, 2)
-                    theta = angles[..., 0]  # (B, V, N) RY 角度
-                    phi = angles[..., 1]    # (B, V, N) RZ 角度
-                    # 单个 qubit 态: |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)sin(θ/2)|1⟩
-                    c = torch.cos(theta / 2)  # (B, V, N)
-                    s = torch.sin(theta / 2)  # (B, V, N)
-                    # 构造 (B, V, N, 2) 复数态
-                    psi_single = torch.stack([
-                        c,
-                        s * torch.exp(1j * phi.to(torch.cfloat))
-                    ], dim=-1)  # (B, V, N, 2)
-                    # Tensor product: N 个 qubit -> 2^N 维
-                    psi = psi_single[..., 0, :]  # (B, V, 2) 第一个 qubit
-                    for i in range(1, N):
-                        psi = torch.einsum('...i,...j->...ij', psi, psi_single[..., i, :])
-                        psi = psi.view(*psi.shape[:-2], -1)  # flatten
-                    # 归一化
-                    psi = psi / (psi.norm(dim=-1, keepdim=True) + 1e-8)
+                    # 2026-08-23 修复：S-only 走完整 fmap（含 CNOT 纠缠层），
+                    # 而非手动构造无纠缠乘积态。乘积态保真度核数学上等价于经典核
+                    # （量子核 vs rbf 消融无差异的根因）。用 H 编码变量身份 + S 调制，
+                    # 经纠缠 feature map 生成真纠缠量子态。
+                    if self.fixed_s_scale:
+                        S_scaled_enc = S.float() / (S.float().abs().max(dim=1, keepdim=True).values + 1e-8)
+                    else:
+                        S_scaled_enc = self.gamma * self.s_ln(S.float())
+                    psi = self.fmap(H_in, S_scaled_enc)  # (B, V, 2^N)，含纠缠
+                    K = self.kernel_fn(psi)
                 elif self.use_S and S is not None:
                     if self.fixed_s_scale:
                         # P1-1b: 固定尺度归一化（按变量行 max），去掉可学习 γ/s_ln —— 优化器无法压塌
@@ -376,11 +462,19 @@ class QuantumMixLayer(nn.Module):
                     # 只对非对角部分做 softmax，让权重真正分配给其他变量
                     K_soft = K - torch.eye(K.shape[-1], device=K.device).unsqueeze(0)
                 K_n = torch.softmax(K_soft / self.kernel_T, dim=-1)
+                if self.gate_pv_src:
+                    # P2: 每源门控（可学习 topk）：弱耦合源变量 w 的跨变量贡献被关闭，
+                    # 其余源重归一化 —— 缓解大 V 弱耦合下 K 退化为全局平均（ECL/traffic 税）
+                    src_g = torch.sigmoid(self._gate_src_raw).unsqueeze(0).unsqueeze(0)  # (1,1,V) 列
+                    K_n = K_n * src_g
+                    K_n = K_n / K_n.sum(-1, keepdim=True).clamp_min(1e-8)
+                self._last_K_norm = K_n
                 if self.topk > 0:
                     # 变量选择：仅保留每行 topk 个耦合，其余归零后重归一化
                     kth = torch.topk(K_n, self.topk, dim=-1).values[:, :, -1:]
                     K_n = K_n * (K_n >= kth)
                     K_n = K_n / K_n.sum(-1, keepdim=True).clamp_min(1e-8)
+                self._last_K_norm = K_n  # QF-1: 暴露下游真正用的归一化权重
                 Hp = torch.einsum("bvw,bwe->bve", K_n, HW)
             elif self.norm_type == "l1":
                 # 有符号权重归一化（轮 C 线性核专用）：K 可为负（虚部反对称=有向），
@@ -397,7 +491,11 @@ class QuantumMixLayer(nn.Module):
             Hp_g = self.hp_scale * self.ln(Hp)   # 固定缩放（轮 G：防 V 大时强信号发散）
             if self.gate:
                 # 门控模式（轮 C）：γ=0 → H' ≡ H（结构保证不更差），γ>0 时才注入混合
-                return H + self.gate_value * Hp_g, K
+                gv = self.gate_value
+                if self.gate_per_var:
+                    # P2: 每变量接受门控 —— 弱耦合变量关闭跨变量消息（消除大 V 平均化税）
+                    gv = gv * torch.sigmoid(self._gate_pv_raw).unsqueeze(0).unsqueeze(-1)  # (1, V, 1)
+                return H + gv * Hp_g, K
             return self.ln(H_in + Hp_g), K
 
 

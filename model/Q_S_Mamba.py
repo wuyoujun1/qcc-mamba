@@ -42,7 +42,7 @@ class Model(_S_Mamba):
                     M=configs.spectrum_M,
                     entangle_topo=configs.entangle_topo,
                     kernel_fn=configs.kernel_fn,
-                    use_fmap=True,
+                    use_fmap=bool(getattr(configs, "qmix_use_fmap", 1)),
                     theta_S_scale0=configs.theta_S_scale0,
                     pre_norm=True,
                     use_H=bool(configs.qmix_use_H),
@@ -57,12 +57,25 @@ class Model(_S_Mamba):
                     offdiag=configs.offdiag,
                     gate=configs.qmix_gate,
                     gate_init=configs.qmix_gate_init,
+                    gate_per_var=bool(getattr(configs, "qmix_gate_pv", False)),
+                    gate_pv_init=getattr(configs, "qmix_gate_pv_init", 3.0),
+                    gate_pv_src=bool(getattr(configs, "qmix_gate_pv_src", False)),
+                    gate_pv_src_init=getattr(configs, "qmix_gate_pv_src_init", -3.0),
                     hp_scale=hp_scale,
                     delay_in_s=configs.delay_in_s,
                     fixed_s_scale=bool(getattr(configs, "qmix_fixed_s_scale", False)),
+                    kernel_kappa=getattr(configs, "kernel_exp", 1.0),
+                    kernel_power=getattr(configs, "kernel_power", 2.0),
+                    kernel_exp_learn=getattr(configs, "kernel_exp_learn", False),
+                    kernel_power_learn=getattr(configs, "kernel_power_learn", False),
+                    kernel_phase=getattr(configs, "kernel_phase", 1.0),
+                    joint_encoding=bool(getattr(configs, "qmix_joint", 0)),
+                    joint_topo=getattr(configs, "joint_topo", "var_linear"),
+                    n_vars=configs.enc_in,
                 ) for _ in range(q)
             ])
             self._last_K = None  # (B, V, V) 诊断用
+            self._last_K_norm = None  # QF-1: 归一化消息权重 (B, V, V)，对齐损失用
             self._last_S = None
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
@@ -95,6 +108,7 @@ class Model(_S_Mamba):
                     enc_mixed, K = self.qmix[i](enc_var, S, use_S_only=use_S_only)  # (B, 7, d), (B, 7, 7)
                     enc_out = torch.cat([enc_mixed, enc_out[:, V:, :]], dim=1)
                     self._last_K = K
+                    self._last_K_norm = getattr(self.qmix[i], '_last_K_norm', None)
                     self._last_S = S
             if self.encoder.norm is not None:
                 enc_out = self.encoder.norm(enc_out)

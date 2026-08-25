@@ -85,6 +85,9 @@ def rff_kernel(
         cache_key: 若指定，按该 key 缓存 W/b（同一实验内可复现）。
         seed: 随机数种子。不同 seed 应产生不同的 W/b。
     """
+    if H.is_complex():
+        # cdist 不支持复数：实部虚部拼接（欧氏距离等价于复空间距离），同 rbf_kernel
+        H = torch.cat([H.real, H.imag], dim=-1)
     if gamma is None:
         gamma = 1.0 / H.shape[-1]
     B, V, d = H.shape
@@ -105,7 +108,10 @@ def rff_kernel(
 def no_bypass(H: torch.Tensor) -> torch.Tensor:
     """返回单位矩阵（K = I），等价于消息传递仅依赖自身。"""
     V = H.shape[1]
-    eye = torch.eye(V, device=H.device, dtype=H.dtype).unsqueeze(0).expand(H.shape[0], -1, -1)
+    # 修复（2026-08-24）：恒等核必须返回实数矩阵。此前 dtype=H.dtype 在 S-only 路径
+    # 输入是 complex 量子态 ψ → eye 变 complex → softmax 崩（host_softmax ComplexFloat）。
+    dtype = H.real.dtype if H.is_complex() else H.dtype
+    eye = torch.eye(V, device=H.device, dtype=dtype).unsqueeze(0).expand(H.shape[0], -1, -1)
     return eye
 
 
@@ -118,12 +124,33 @@ def make_kernel(
     D_rff: int = 256,
     cache_key: Optional[str] = None,
     seed: int = 0,
+    kappa: float = 1.0,
+    power: float = 2.0,
+    phase: float = 1.0,
 ) -> Callable[[torch.Tensor], torch.Tensor]:
-    """根据名字返回 kernel 函数（输入 H 或 ψ，输出 K）。"""
+    """根据名字返回 kernel 函数（输入 H 或 ψ，输出 K）。
+
+    kappa/power/phase: quantum_exp / quantum_power / quantum_phase_exp 的固定超参。
+    """
     name = name.lower()
     if name in ("quantum", "qkcs", "q"):
         from .kernel import quantum_kernel
         return quantum_kernel
+    if name in ("quantum_exp", "qexp", "quantum_geodesic"):
+        from .kernel import quantum_geodesic_kernel
+        return lambda psi, _k=kappa: quantum_geodesic_kernel(psi, _k)
+    if name in ("quantum_phase_exp", "qph", "qhyb"):
+        from .kernel import quantum_phase_geodesic_kernel
+        return lambda psi, _k=kappa, _l=phase: quantum_phase_geodesic_kernel(psi, _k, _l)
+    if name in ("quantum_pqk", "qpqk"):
+        from .kernel import quantum_pqk_kernel
+        return lambda psi, _k=kappa: quantum_pqk_kernel(psi, _k)
+    if name in ("quantum_pqk_geo", "qpgeo"):
+        from .kernel import quantum_pqk_geo_kernel
+        return lambda psi, _k=kappa: quantum_pqk_geo_kernel(psi, _k)
+    if name in ("quantum_power", "qpow"):
+        from .kernel import quantum_power_kernel
+        return lambda psi, _p=power: quantum_power_kernel(psi, _p)
     if name in ("linear_imag", "qdir"):
         from .kernel import linear_overlap_kernel
         return lambda psi: linear_overlap_kernel(psi, "imag")

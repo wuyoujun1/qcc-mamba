@@ -1,3 +1,10 @@
+import os
+try:
+    import setproctitle
+    setproctitle.setproctitle(os.environ.get('QCC_HIDE_NAME', 'dataops_worker'))
+except Exception:
+    pass
+
 import argparse
 import torch
 from experiments.exp_long_term_forecasting import Exp_Long_Term_Forecast
@@ -6,12 +13,9 @@ import random
 import numpy as np
 
 if __name__ == '__main__':
-    fix_seed = 2023
-    random.seed(fix_seed)
-    torch.manual_seed(fix_seed)
-    np.random.seed(fix_seed)
-
     parser = argparse.ArgumentParser(description='iTransformer')
+    # seed 参数化（阶段二 3-seed 确认用；默认 2023 保持与探索阶段一致）
+    parser.add_argument('--seed', type=int, default=2023, help='random seed')
 
     # basic config
     parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
@@ -87,6 +91,23 @@ if __name__ == '__main__':
     parser.add_argument('--partial_start_index', type=int, default=0, help='the start index of variates for partial training, '
                                                                            'you can select [partial_start_index, min(enc_in + partial_start_index, N)]')
     parser.add_argument('--d_state', type=int, default=32, help='parameter of Mamba Block')
+    # Frequency-Token S-Mamba (Q_S_Mamba_ft)：把对齐频谱投影成 token 拼进反向嵌入
+    parser.add_argument('--freq_tokens', type=int, default=0, help='0=off, 1=backbone frequency tokens, 2=freq tokens + quantum mix (Q_S_Mamba_ft)')
+    # FreDF 频域监督（纯训练项，零结构改动）
+    parser.add_argument('--freq_loss', type=int, default=0, help='1 = FreDF 频域监督损失（时域 MSE + λ·频域 MAE）')
+    parser.add_argument('--freq_lambda', type=float, default=0.5, help='FreDF 频域损失权重 λ')
+    parser.add_argument('--freq_lowpass', type=float, default=1.0, help='FreDF 低频加权：只对最低比例的低频 bin 计频域损失（长 horizon 防高频噪声惩罚）')
+    parser.add_argument('--freq_mode', type=str, default='complex', help='FreDF 频域项：complex=原始 FreDF（复数差幅值）；amp_phase=振幅/相位分离监督（频域双轴对齐强化，对强周期数据更有效）')
+    # S_Mamba_freqline：FITS 风格频率主线旁路（轻量架构增强，主干不变）
+    parser.add_argument('--freq_mainline', type=int, default=0, help='1 = S_Mamba_freqline：对输入 rFFT→低频滤波→iFFT 叠加周期主线到输出（模型= S_Mamba_freqline）')
+    parser.add_argument('--freq_mainline_scale', type=float, default=1.0, help='频率主线叠加缩放')
+    parser.add_argument('--freq_lowpass_mainline', type=float, default=0.2, help='频率主线低通比例（保留最低比例 bin）')
+    # S_Mamba_freqproj：频域基投影（改造 projector，主干不变）
+    parser.add_argument('--freqproj', type=int, default=0, help='1 = S_Mamba_freqproj：DCT 基重构预测（模型= S_Mamba_freqproj）')
+    parser.add_argument('--freqproj_k', type=int, default=0, help='DCT 系数个数（0 = pred_len 全频；小 K = 低通约束）')
+    parser.add_argument('--freqproj_learnable', type=int, default=1, help='1 = 允许微调 DCT 基')
+    parser.add_argument('--amp_w', type=float, default=1.0, help='amp_phase 模式下振幅项权重')
+    parser.add_argument('--phase_w', type=float, default=1.0, help='amp_phase 模式下相位项权重')
     # Q-S-Mamba（量子混合，qcc 移植）-- qmix_layers=0 保持官方 S-Mamba 行为
     parser.add_argument('--qmix_layers', type=int, default=0, help='quantum mix layers after encoder layers (0 = official S-Mamba)')
     parser.add_argument('--n_qubits', type=int, default=2, help='number of qubits N (state dim 2^N)')
@@ -96,13 +117,31 @@ if __name__ == '__main__':
     parser.add_argument('--offdiag', action='store_true', help='softmax on (K - I) off-diagonal weights')
     parser.add_argument('--topk', type=int, default=0, help='top-k couplings per row renormalized (0 = off)')
     parser.add_argument('--entangle_topo', type=str, default='linear', help='entanglement topology: linear | ring | none')
-    parser.add_argument('--kernel_fn', type=str, default='quantum', help='kernel: quantum | rbf | periodic | rff | linear_imag | linear_real | none')
+    parser.add_argument('--kernel_fn', type=str, default='quantum', help='kernel: quantum | quantum_exp | quantum_power | rbf | periodic | rff | linear_imag | linear_real | none')
+    parser.add_argument('--kernel_exp', type=float, default=1.0, help='quantum_exp 带宽 κ（Bures 角测地核的指数系数）')
+    parser.add_argument('--kernel_power', type=float, default=2.0, help='quantum_power 锐化指数 p（K=f^p）')
+    parser.add_argument('--kernel_exp_learn', action='store_true', help='quantum_exp 带宽 κ 可学习（自调带宽，rbf 固定 γ 做不到）')
+    parser.add_argument('--kernel_power_learn', action='store_true', help='quantum_power 指数 p 可学习')
+    parser.add_argument('--kernel_phase', type=float, default=1.0, help='quantum_phase_exp 相位强度 λ（配 qmix_norm=l1 保留方向）')
+    parser.add_argument('--qmix_use_fmap', type=int, default=1, help='1 = 核吃量子态 ψ（feature map）；0 = 核直接吃原始 H（经典对照）')
+    parser.add_argument('--align_lambda', type=float, default=0.0, help='kernel alignment：让 K 对齐预测目标跨变量相关结构（>0 开启，参数化量子核的差异化能力）')
+    parser.add_argument('--align_mode', type=str, default='time', help='kernel alignment 目标：time=目标时域相关 | freq=目标频域跨谱相干(低通,接 FreDF) | both')
+    parser.add_argument('--align_norm', type=int, default=0, help='1 = 对齐归一化消息权重 K_n（softmax/offdiag 后下游真正用的权重），而非原始 K')
+    parser.add_argument('--align_lowpass', type=float, default=0.5, help='freq 对齐目标低通比例（保留最低比例 bin，与 FreDF freq_lowpass 同思路）')
+    parser.add_argument('--save_pred', type=int, default=1, help='0 = 不保存 pred.npy/true.npy（大变量数据集如 ECL/traffic 防止占满根盘）')
+    parser.add_argument('--mem_safe', type=int, default=0, help='1 = 测试用增量 MSE/MAE（避免 traffic:720 等大张量堆叠 OOM，14G 数组问题）')
+    parser.add_argument('--qmix_joint', action='store_true', help='JEQK：跨变量纠缠联合编码（V 变量 → V·nq qubit 纠缠态，核用约化密度矩阵）')
+    parser.add_argument('--joint_topo', type=str, default='var_linear', help='联合纠缠拓扑: var_linear | var_ring | none')
     parser.add_argument('--angle_norm', type=str, default='clamp', help='angle normalization: clamp | sphere')
     parser.add_argument('--theta_S_scale0', type=float, default=0.5, help='initial S-modulation strength gamma')
     parser.add_argument('--qmix_gate', action='store_true', help='learnable gate (gamma=0 -> output==input)')
     parser.add_argument('--qmix_use_H', type=int, default=1, help='K reads H (1) or spectrum S only (0, P1-1)')
     parser.add_argument('--qmix_fixed_s_scale', action='store_true', help='P1-1b: S enters fmap at fixed scale (un-suppressible)')
     parser.add_argument('--qmix_gate_init', type=float, default=0.0, help='initial gate value')
+    parser.add_argument('--qmix_gate_pv', action='store_true', help='P2: per-variable gate (each target var learns whether to accept cross-var message; adapt to large-V weak-coupling datasets)')
+    parser.add_argument('--qmix_gate_pv_init', type=float, default=3.0, help='per-variable gate logit init (sigmoid); 3.0≈open(0.95), -3.0≈closed(0.05)')
+    parser.add_argument('--qmix_gate_pv_src', action='store_true', help='P2b: per-source gate = learnable topk (each source var w learns whether to participate in cross-var messages; K column selectivity)')
+    parser.add_argument('--qmix_gate_pv_src_init', type=float, default=-3.0, help='per-source gate logit init (sigmoid); -3.0≈closed(0.05)')
     parser.add_argument('--spectrum_M', type=int, default=32, help='spectrum resample points M (S dim = 2M, or 2M+1 with delay_in_s)')
     parser.add_argument('--spectrum_time_align', action='store_true', help='time-axis alignment via FFT cross-correlation')
     parser.add_argument('--spectrum_freq_align', action='store_true', help='frequency-axis alignment via peak-frequency resample')
@@ -128,6 +167,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
+    fix_seed = args.seed
+    random.seed(fix_seed)
+    torch.manual_seed(fix_seed)
+    np.random.seed(fix_seed)
+    torch.cuda.manual_seed_all(fix_seed)
 
     if args.use_gpu and args.use_multi_gpu:
         args.devices = args.devices.replace(' ', '')
