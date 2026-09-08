@@ -413,6 +413,7 @@ class QuantumMixLayer(nn.Module):
                     else:
                         S_scaled_enc = self.gamma * self.s_ln(S.float())
                     psi = self.fmap(H_in, S_scaled_enc)  # (B, V, 2^N)，含纠缠
+                    self._last_psi = psi
                     K = self.kernel_fn(psi)
                 elif self.use_S and S is not None:
                     if self.fixed_s_scale:
@@ -444,6 +445,7 @@ class QuantumMixLayer(nn.Module):
                             K = K / self.angle_groups
                     else:
                         psi = self.fmap(H_in, S_scaled)
+                        self._last_psi = psi
                         K = self.kernel_fn(psi)
             else:
                 K = self.kernel_fn(H_in)
@@ -452,15 +454,20 @@ class QuantumMixLayer(nn.Module):
             if H.device.type == 'cuda':
                 torch.cuda.synchronize()
 
+            self._last_K = K  # 原始保真度核（对称、对角≈1）供解释性验证
             HW = torch.einsum("bvd,de->bve", H_in, self.W_q.weight)
             if self.norm_type == "softmax":
                 # GAT 式行归一化：K[v,:] 和为 1，Hp 幅度 ≈ H，跨变量信号不被 1/V 稀释
                 # kernel_T < 1：放大保真度差异（0.004 级 → 0.04 级），恢复核选择性
                 K_soft = K
                 if self.offdiag:
-                    # 去对角（根因级）：保真度核 diag=1 使 softmax 对角权重趋近 1（恒等映射），
-                    # 只对非对角部分做 softmax，让权重真正分配给其他变量
-                    K_soft = K - torch.eye(K.shape[-1], device=K.device).unsqueeze(0)
+                    # 去对角（根因级）：保真度核 diag=1 使 softmax 对角权重趋近 1（恒等映射）。
+                    # 修正（2026-09-07）：仅减单位阵会在 softmax 中留下 e^0 的对角权重(≈1/Z)，
+                    # 与“消息只分配给其他变量”的理论不一致；这里把对角 logit 直接置为极大负值，
+                    # 使对角权重严格为 0，行只在其余变量上归一化。
+                    K_soft = K.clone()
+                    diag_idx = torch.arange(K.shape[-1], device=K.device)
+                    K_soft[:, diag_idx, diag_idx] = K_soft[:, diag_idx, diag_idx].detach().min() - 1e6
                 K_n = torch.softmax(K_soft / self.kernel_T, dim=-1)
                 if self.gate_pv_src:
                     # P2: 每源门控（可学习 topk）：弱耦合源变量 w 的跨变量贡献被关闭，
