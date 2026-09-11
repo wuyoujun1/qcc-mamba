@@ -18,3 +18,6 @@ dataset/**/*.csv
 .venv/
 venv/
 .ipynb_checkpoints/
+
+# 原始实验结果（本地保留，不入库）
+raw_runs/
