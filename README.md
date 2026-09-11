@@ -53,7 +53,7 @@ export OMP_NUM_THREADS=8                 # 本机必须，否则线程爆炸
 | 3.2 的两级对齐是必备环节 | `--spectrum_time_align` / `--spectrum_freq_align` 都是 `store_true`，**默认关**；不开则不做相位校正、频率轴不归一 |
 
 **还有两个未决口径**（正文与实验哪边为准尚未拍板）：
-- `kernel_fn`：正文写保真度核 `K=|⟨ψ|ψ⟩|²`，但 `METHOD_ARCHITECTURE.md` 说最终架构用 `quantum_exp`（测地核＋可学习 κ）；主表逐格命令行已不可考。
+- `kernel_fn`：正文写保真度核 `K=|⟨ψ|ψ⟩|²`，但早期架构文档说最终用 `quantum_exp`（测地核＋可学习 κ）；主表逐格命令行已不可考。
 - 主表 QCCK-M 列（`qf2_*` 那批）当年是用 **softmax + T=0.1** 跑的，而正文现已改按 raw K 写；换口径后主表是否重跑未定。
 
 ## 复现（示例：ETTh1-96 训练 + 测试）
@@ -101,13 +101,11 @@ python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿
 ```
 > **第五章的现行定版就是这个生成器**（小节为 5.1 实验设置 / 5.2 主结果 / 5.3 机制验证 / 5.4 消融 / 5.5 可解释性）。
 > 文件名是历史遗留：默认输出的 `..._20260905.pdf` 与 `..._20260909.pdf` 内容一致（仅 PDF 内部 ID 不同），改完正文重跑即可。
-> `第五章_完整修正版_95保留.tex` / `.pdf` 是**旧版**，小节编号为 5.6/5.7 且含**已删除的敏感性节**，勿据此写作。
 - 生成器 `paper/ch5/ch5cn_pdf.py`（reportlab）：正文/表格/图注都在脚本里；
 - 图在 `paper/ch5/figs/`。仓库里的造图脚本只有三个，**且它们的输出路径目前仍写死 `/home/youjun/paper/figs/`，换机要改**：
   - `paper/ch5/ch5_winheat.py` → 耦合度-增益热力图；
   - `paper/ch5/ch5_supp_20260909/gen_figs_stats.py` → 耦合核热力图 / ECDF；
   - `paper/ch5/ch5_supp_20260909/gen_pred_adv.py` → 预测案例图。
-  - ⚠️ `figs/ch5_sens*.png` 是**已删除的敏感性节**的遗留图，定版正文不再引用（造图脚本已随该节一并移除）。
 - 中文字体随仓库：`paper/ch5/cjkfont/wqy-zenhei.ttf`（可用 `QCC_CJK_FONT` 覆盖）；
 - 主表数据 md 在 `paper/ch5/data/`（可用 `QCC_DATA_DIR` 覆盖）；
 - 依赖：`reportlab`、`pillow`（已加入 requirements）。

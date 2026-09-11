@@ -1,53 +1,60 @@
-# 文档索引（权威性一览）
+# 文档索引
 
-> 生成于 2026-09-11。**冲突时以“现行”为准；“过期”文件仅供追溯，勿引用。**
+> 2026-09-11 清过一次：**每章只保留最新的逐句稿**，旧版本已从仓库删除（可从 git 历史恢复）。
+> 冲突时以下表为准。
 
 > ⚠️ **代码不是跑出论文结果的那一份**：仓库 `main` 只是参考快照，跑结果用工作副本 `/home/youjun/dataops_ws/`。
 > 仓库缺 `--qmix_norm raw_k`（论文最新理论）、`--qmix_msg`、`--qmix_ln_hp`、`intervention_mask`（表 7 屏蔽）等；
 > 且论文正文有 8 处描述与代码对不上。**清单见根目录 `README.md` 的「⚠️ 代码口径差异」一节。**
 
-| 文件 | 状态 |
+## 正文（唯一版本）
+| 文件 | 说明 |
 |---|---|
-| `EXPERIMENT_CHAPTER.md` | ⚠️ 过期（文首有标记） |
-| `HANDOFF.md` | ✅ 现行·入口 |
-| `METHOD_ARCHITECTURE.md` | 现行 |
-| `README.md` | ✅ 现行·入口 |
-| `THEORY_QUANTUM_INTERFACE.md` | 现行 |
-| `docs/ENVIRONMENT.md` | ✅ 现行·入口 |
-| `paper/ch3/CHAPTER3_QCCM_PAPER_ZH(2).md` | ⚠️ 过期（文首有标记） |
-| `paper/ch3/第三章修改版1.md` | 现行 |
-| `paper/ch3/第三章架构图的文字描述.md` | 现行 |
-| `paper/ch4/第四章修改版1.md` | 现行 |
-| `paper/ch4/第四章架构图文字描述.md` | 现行 |
-| `paper/ch5/QCCK-M第五章补充实验任务单_服务器执行版.md` | 现行 |
-| `paper/ch5/ch5_supp_20260909/README.md` | 现行 |
-| `paper/ch5/ch5_supp_20260909/运行记录_20260909.md` | 现行 |
-| `paper/ch5/data/第五章_主表消融_MSEMAE_20260904.md` | 现行 |
-| `paper/ch5/图2热力图颜色与ECDF解释修改说明.md` | 现行 |
-| `paper/ch5/ch5cn_pdf.py` | ✅ **现行·定版生成器**（第五章的正文以它的输出为准） |
-| `paper/ch5/第五章初稿_中文_20260909.pdf` | ✅ **现行·第五章定版**（= 生成器当前输出；小节 5.1–5.5） |
-| `paper/ch5/第五章初稿_中文_20260905.pdf` | 现行（生成器默认输出名，与上面那份内容一致，仅 PDF 内部 ID 不同） |
-| `paper/ch5/第五章_完整修正版_95保留.tex` | ⚠️ **过期**：旧版，编号 5.6/5.7，含**已删除的敏感性节**，勿据此写作 |
-| `paper/ch5/第五章_完整修正版_95保留.pdf` | ⚠️ 过期（同上，旧版 PDF） |
-| `paper/ch5/第五章_实验状态与记录_20260905.md` | 现行 |
-| `paper/ch5/第五章_隔夜运行_状态_20260905.md` | ⚠️ 过期（文首有标记） |
-| `paper/ch5/第五章修改与实验补强建议.md` | 现行 |
-| `paper/ch5/第五章实验重设计.md` | 现行 |
-| `paper/ch5/第五章行文骨架_20260904.md` | 现行 |
-| `paper/outline/OPUS_WRITING_BRIEF.md` | 现行 |
-| `paper/outline/PAPER_OUTLINE_TKDE.md` | ⚠️ 过期（文首有标记） |
-| `paper/outline/QCC论文写作_skill.md` | 现行 |
-| `paper/outline/RELATED_WORK_CITATIONS.md` | 现行 |
-| `paper/outline/STYLE_GUIDE.md` | 现行 |
-| `paper/outline/师姐批注16条_digest.md` | 现行 |
-| `result_long_term_forecast.txt` | 参考（跑批日志） |
+| `paper/ch3/第三章修改版1.md` | **第三章现行**·逐句稿（QCCK：频域对齐 / QCCE / 量子核） |
+| `paper/ch4/第四章修改版1.md` | **第四章现行**·逐句稿（QCCK-M 网络与算法） |
+| `paper/ch5/ch5cn_pdf.py` | **第五章定版生成器**，正文/表格/图注都在里面 |
+| `paper/ch5/第五章初稿_中文_20260909.pdf` | **第五章定版 PDF**（= 生成器当前输出；小节 5.1–5.5） |
+| `paper/ch5/第五章初稿_中文_20260905.pdf` | 生成器默认输出名，与上面那份内容一致（仅 PDF 内部 ID 不同） |
 
-## 被引用但不在仓库的文件（历史引用，已失效）
+## 入口与环境
+| 文件 | 说明 |
+|---|---|
+| `README.md` | 入口；含「⚠️ 代码口径差异」 |
+| `HANDOFF.md` | 换机交接 |
+| `docs/ENVIRONMENT.md` | 新机搭环境全流程（~15 分钟） |
 
-- `BACKBONE_CONFIG.md`
-- `MAIN_AND_ABLATION_TABLES.md`
-- `PLOTS_INDEX.md`
-- `40CELL_RESULTS.md`
-- `baseline_local.md`
+## 数据与补充实验
+| 文件 | 说明 |
+|---|---|
+| `paper/ch5/data/第五章_主表消融_MSEMAE_20260904.md` | 主表 / 消融 MSE·MAE 双列表 |
+| `paper/ch5/ch5_supp_20260909/` | 补充实验（K 热力图 / ECDF / 斯皮尔曼 / 屏蔽），含 `README.md`、`运行记录_20260909.md`、`summary_coupling.csv` |
+| `paper/ch5/QCCK-M第五章补充实验任务单_服务器执行版.md` | 补充实验任务单 |
+| `paper/ch5/图2热力图颜色与ECDF解释修改说明.md` | 图 2 改法说明 |
 
-这些是早期草稿链里的文件名，正文/记录中若出现请忽略或以 INDEX 中的现行文档为准。
+## 写作参考
+| 文件 | 说明 |
+|---|---|
+| `paper/outline/STYLE_GUIDE.md` | 组内句式风格 |
+| `paper/outline/师姐批注16条_digest.md` | 师姐返修批注（最高优先） |
+| `paper/outline/RELATED_WORK_CITATIONS.md` | 相关工作引用 |
+| `paper/outline/QCC论文写作_skill.md` | 写作方法论 |
+
+## ⚠️ 旧口径，待清（仍留仓库，勿作依据）
+| 文件 | 问题 |
+|---|---|
+| `paper/outline/PAPER_OUTLINE_TKDE.md` | 大纲；§3 内嵌旧版第三章正文（QCCM/PAI），§5 仍列已证伪的浓度定理 |
+| `paper/outline/OPUS_WRITING_BRIEF.md` | 通篇 QCCM / QuantumMixLayer / PAI 旧命名 |
+| `paper/ch5/第五章修改与实验补强建议.md` | 按旧表号/图号（表 6/9、图 3/4/5）与"温度 T 视界自适应"写 |
+| `paper/ch5/第五章实验重设计.md` | 同上，含已删的敏感性节设计 |
+| `paper/ch5/第五章行文骨架_20260904.md` | 含"5.6 敏感性"骨架、A1–A4 第二套语义 |
+| `paper/ch5/第五章_实验状态与记录_20260905.md` | 部分数字与定版不符（R1/R3、表号） |
+
+## 2026-09-11 已删除（需要时用 `git show <旧提交>:<路径>` 取回）
+`EXPERIMENT_CHAPTER.md`、`THEORY_QUANTUM_INTERFACE.md`、`METHOD_ARCHITECTURE.md`、
+`paper/ch3/CHAPTER3_QCCM_PAPER_ZH(2).md`、`paper/ch3/第三章架构图的文字描述.md`、`paper/ch4/第四章架构图文字描述.md`、
+`paper/ch5/第五章_完整修正版_95保留.tex` / `.pdf`、`paper/ch5/第五章_隔夜运行_状态_20260905.md`、
+`paper/ch5/figs/ch5_sens*.png|pdf`（已删敏感性节的遗留图）。
+
+## 被引用但不在仓库的文件
+`BACKBONE_CONFIG.md`、`MAIN_AND_ABLATION_TABLES.md`、`PLOTS_INDEX.md`、`40CELL_RESULTS.md`、`baseline_local.md`、`run_slow.py`、`run_parallel.sh`
+—— 都在工作目录 `/home/youjun/dataops_ws/`，不在仓库；正文/记录里若出现请忽略。
