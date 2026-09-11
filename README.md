@@ -38,6 +38,17 @@ python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data 
 - `--qmix_msg {H|S}`、`--qmix_ln_hp {0|1}`：消息来源与是否对 Hp 做 LN（实验表明 H + 保留 LN 最优）。
 - `--kernel_T`、`--topk`、`--offdiag`：softmax 分支的温度/稀疏化。
 
+## 渲染第五章 PDF
+```bash
+cd paper/ch5
+python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿_中文_20260905.pdf
+```
+- 生成器 `paper/ch5/ch5cn_pdf.py`（reportlab）：正文/表格/图注都在脚本里；
+- 图在 `paper/ch5/figs/`（由 `ch5_winheat.py`、`ch5_sens_full.py` 等生成）；
+- 中文字体随仓库：`paper/ch5/cjkfont/wqy-zenhei.ttf`（可用 `QCC_CJK_FONT` 覆盖）；
+- 主表数据 md 在 `paper/ch5/data/`（可用 `QCC_DATA_DIR` 覆盖）；
+- 依赖：`reportlab`、`pillow`（已加入 requirements）。
+
 ## 实验与论文材料
 - **主表/消融/敏感性/干预（表 8）**：见 `paper/ch5/第五章初稿_中文_20260905.pdf`（生成器 `paper/ch5/ch5cn_pdf.py`）。
 - **补充实验（K 可视化/ECDF/斯皮尔曼/干预脚本与结果）**：`paper/ch5/ch5_supp_20260909/`。

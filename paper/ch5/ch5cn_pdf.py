@@ -11,11 +11,15 @@ from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
                                 TableStyle, Image, PageBreak, KeepTogether)
 from reportlab.lib.utils import ImageReader
 
-FONT = "/home/youjun/cjkfont/wqy-zenhei.ttf"
+import os, sys
+BASE = os.path.dirname(os.path.abspath(__file__))
+FONT = os.environ.get("QCC_CJK_FONT", os.path.join(BASE, "cjkfont", "wqy-zenhei.ttf"))
+FIGS = os.path.join(BASE, "figs")
+OUT  = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "第五章初稿_中文_20260905.pdf")
 pdfmetrics.registerFont(TTFont("WQY", FONT))
 pdfmetrics.registerFontFamily("WQY", normal="WQY", bold="WQY", italic="WQY", boldItalic="WQY")
 
-WD = "/home/youjun/dataops_ws"
+WD = os.environ.get("QCC_DATA_DIR", os.path.join(BASE, "data"))
 MD = open(f"{WD}/第五章_主表消融_MSEMAE_20260904.md", encoding="utf-8").read()
 
 def parse_md_main(part):
@@ -101,7 +105,7 @@ def fig(path, w, cap_text):
     h = w * ih / iw
     return [KeepTogether([Paragraph(cap_text, cap), Image(path, width=w, height=h)])]
 
-doc = SimpleDocTemplate("/home/youjun/paper/第五章初稿_中文_20260905.pdf",
+doc = SimpleDocTemplate(OUT,
                         pagesize=A4, leftMargin=1.6*cm, rightMargin=1.6*cm,
                         topMargin=1.5*cm, bottomMargin=1.5*cm,
                         title="第五章 实验（中文初稿）")
@@ -227,7 +231,7 @@ t2.setStyle(TableStyle(sty))
 E.append(t2)
 E.append(Paragraph("注：S-Mamba 为本机按官方配置复现；Exchange 在 720 与 Traffic 在 336 两格的取值与官方值相等，属于平局；Beijing 的八条基线亦由公开实现复现，其 MSE 与 MAE 一并给出。", note))
 E.append(Spacer(1, 4))
-E += fig("/home/youjun/paper/figs/ch5_winheat.png", 15*cm, "图 1　QCCK-M 相对 S-Mamba 的 MSE 降低百分比（%）：行为预测长度、列为数据集，格内数字为降低幅度，颜色仅作辅助。")
+E += fig(os.path.join(FIGS, "ch5_winheat.png"), 15*cm, "图 1　QCCK-M 相对 S-Mamba 的 MSE 降低百分比（%）：行为预测长度、列为数据集，格内数字为降低幅度，颜色仅作辅助。")
 
 E.append(Paragraph("5.3　机制验证", h2s))
 E.append(Paragraph("主干对跨变量输入近乎不敏感。我们在 ETTh1 的 96 步设置上，对每个输入通道施加一个小扰动，测各输出通道的相对响应。表 3 在两个数据集上给出同一现象。S-Mamba 的非对角响应约为 1e-7，非对角与对角响应之比约为 1e-6，即一个变量的输出几乎不受其它变量输入的影响；加入耦合模块后，非对角响应上升到约 2e-4 到 4e-4，比值上升到 1e-3 到 1e-2 量级，跨变量响应提升约三个数量级甚至更高。这是本方法立足点的直接定量证据。", body))
@@ -264,14 +268,14 @@ sens2 = [["数据集-H","默认","n_qubits=3","n_qubits=7","gate=0.0","gate=1.0"
          ["ETTm2 96","0.1722","0.1731","0.1734","0.1738","0.1721"],
          ["ETTm2 192","0.2428","0.2384","0.2433","0.2413","0.2438"]]
 E += mk_table(["数据集-H","默认","n=3","n=7","g=0.0","g=1.0"], sens2[1:], [2.6*cm,1.9*cm,1.8*cm,1.8*cm,1.8*cm,1.8*cm])
-E += fig("/home/youjun/paper/figs/ch5_sens_full.png", 14*cm, "图 2　量子比特数与门初值的敏感性。四个子图分别对应 ETTh1 的量子比特数、ETTm2 的量子比特数、ETTh1 的门初值、ETTm2 的门初值；横轴为超参数取值，纵轴为相对该数据集该预测长度默认取值的 MSE 变化百分比，每条折线对应一个预测长度、线尾标注步长；默认取值（量子比特数 5、门初值 0.1）为零点。")
+E += fig(os.path.join(FIGS, "ch5_sens_full.png"), 14*cm, "图 2　量子比特数与门初值的敏感性。四个子图分别对应 ETTh1 的量子比特数、ETTm2 的量子比特数、ETTh1 的门初值、ETTm2 的门初值；横轴为超参数取值，纵轴为相对该数据集该预测长度默认取值的 MSE 变化百分比，每条折线对应一个预测长度、线尾标注步长；默认取值（量子比特数 5、门初值 0.1）为零点。")
 
 E.append(Paragraph("5.6　可解释性", h2s))
 E.append(Paragraph("可解释性建立在原始保真度核 f 之上。为与第三章的定义保持一致，这里展示 f[i,j]=|⟨ψ_i|ψ_j⟩|²，它对称、对角为 1、取值在 0 到 1 之间，因此每个元素都能直接读出对应变量对之间的耦合强弱，不需要额外的注意力权重或归因步骤。把测试样本上的 f 平均后我们看到，在七变量的共址系统 ETTh1 与 ETTm2 上，大多数变量对的耦合都很小，少数强耦合对显著突出：强度超过 0.1 的强对约占全部变量对的 10%，其中 ETTh1 上最强的一对耦合值约 0.60；在变量数为 321 的 ECL 与 862 的 Traffic 上，非对角均值更低，强度超过 0.1 的强对占比约 1%。图 3a 与图 3b 直接展示这两个七变量系统的非对角耦合，格内数值即对应变量对的耦合强度：最强两对 HUFL–MUFL 与 HULL–MULL 的取值约 0.60 与 0.31，明显高于其余变量对。我们还校验了长预测长度：图 3d 给出 ETTh1 在 720 步下的结构，其最强耦合对约 0.83，且主要强耦合变量对在不同预测长度下保持一致，例如 HUFL-MUFL 与 HULL-MULL，说明模型捕获了具有持续性的变量关系。", body))
-E += fig("/home/youjun/paper/figs/ch5_k_ETTh1.png", 7.6*cm, "图 3a　ETTh1 平均保真度核 f 的非对角部分，轴为真实变量名，格内数值为对应变量对的耦合值；对角元素恒为 1，可视化时隐藏。")
-E += fig("/home/youjun/paper/figs/ch5_k_ETTm2.png", 7.6*cm, "图 3b　ETTm2 平均保真度核 f 的非对角部分。")
-E += fig("/home/youjun/paper/figs/ch5_k_dist.png", 10.5*cm, "图 3c　ETTh1、ETTm2、ECL 与 Traffic 非对角保真度核 f 值的经验累计分布函数（ECDF）：横轴为变量对的耦合强度 f，纵轴为不超过该值的变量对比例。")
-E += fig("/home/youjun/paper/figs/ch5_k_ETTh1_720.png", 7.6*cm, "图 3d　ETTh1 在 720 步预测长度下的平均保真度核 f 非对角，用于比较不同预测长度下主要变量耦合关系。")
+E += fig(os.path.join(FIGS, "ch5_k_ETTh1.png"), 7.6*cm, "图 3a　ETTh1 平均保真度核 f 的非对角部分，轴为真实变量名，格内数值为对应变量对的耦合值；对角元素恒为 1，可视化时隐藏。")
+E += fig(os.path.join(FIGS, "ch5_k_ETTm2.png"), 7.6*cm, "图 3b　ETTm2 平均保真度核 f 的非对角部分。")
+E += fig(os.path.join(FIGS, "ch5_k_dist.png"), 10.5*cm, "图 3c　ETTh1、ETTm2、ECL 与 Traffic 非对角保真度核 f 值的经验累计分布函数（ECDF）：横轴为变量对的耦合强度 f，纵轴为不超过该值的变量对比例。")
+E += fig(os.path.join(FIGS, "ch5_k_ETTh1_720.png"), 7.6*cm, "图 3d　ETTh1 在 720 步预测长度下的平均保真度核 f 非对角，用于比较不同预测长度下主要变量耦合关系。")
 E.append(Paragraph("不同数据集耦合分布的对比。图 3c 用经验累计分布函数（Empirical Cumulative Distribution Function，ECDF）比较四类数据集非对角耦合值的分布：对每个数据集，我们收集平均 f 的全部非对角元素，纵轴给出不超过横轴对应耦合值的变量对比例。曲线在低值处快速上升，表示该数据集的耦合结构稀疏、绝大多数变量对耦合很弱；曲线整体更靠右，则表示存在更多强耦合对。这里 ETTh1 与 ETTm2 上超过 0.1 的强对约占 10%，而 ECL 与 Traffic 只约占 1%，说明后者绝大多数变量对耦合微弱。该函数只用于描述不同数据集变量关系的稀疏与强弱，为下面的数据一致性分析提供统计背景，不用于声称预测性能。", body))
 E.append(Paragraph("学习到的耦合排序与数据一致。这里用一个统计量检验 f 给出的变量对强弱次序是否与数据自身的关系一致：数据驱动的一侧取每对变量在滞后对齐下的最大互相关绝对值，学习的一侧取 f 的非对角元，两者都按变量对给出成对数值。由于我们关心的只是两列数值的相对次序（哪个变量对更强），而不是数值本身的大小，这里采用斯皮尔曼秩相关来度量：它把两列数值各自换成排序次序后再求相关，取值在 -1 到 1 之间，越接近 1 表示 f 与数据统计给出的变量对强弱次序越一致，不要求两者线性相关。把 f 的非对角元与上述数据统计量做斯皮尔曼相关，四个 ETT 数据集的单盘结果分别为 ETTh1 的 0.07、ETTm2 的 0.40、ETTh2 的 -0.05 与 ETTm1 的 0.14，单盘只有 21 对、样本少而难以显著；把四盘共 84 对合并后，相关系数为 0.25，p 值约 0.02。该结果仅作为辅助统计证据，说明学习到的耦合排序与数据驱动的依赖之间存在弱一致性。", body))
 E.append(Paragraph("表 7　耦合核 f 与数据耦合的斯皮尔曼相关。ρ 为斯皮尔曼秩相关系数（见正文），取 f 的非对角元与滞后对齐互相关统计量的成对排序；合并行把所有 ETT 变量对拼接后计算，p 值来自该合并样本。", cap))
@@ -307,4 +311,4 @@ for i,it in enumerate(ref_items,1):
     E.append(Paragraph(f"[{i}]&nbsp;&nbsp;{it}", ParagraphStyle("ref", fontName="WQY", fontSize=8.5, leading=11, spaceAfter=2, alignment=0)))
 
 doc.build(E)
-print("PDF 已生成 /home/youjun/paper/第五章初稿_中文_20260905.pdf")
+print("PDF 已生成", OUT)

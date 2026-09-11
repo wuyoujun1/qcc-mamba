@@ -20,6 +20,12 @@ cd qcc-mamba && git checkout main     # 只有 main 一条主线
 - 第五章补充实验（K 热力图、ECDF、斯皮尔曼、干预/屏蔽脚本与结果 json）在 `paper/ch5/ch5_supp_20260909/`。
 - 关键结论（2026-09）：**耦合的作用由混合门控初值决定**——`qmix_gate_init` 0.1→0.5/1.0 可让"屏蔽耦合"的误差上升从 ~1% 升到 20%~150%，而测试 MSE 与主表持平（Weather/Beijing 甚至更好）；通道独立盘（ECL/Traffic/Exchange）无此效应，需保持小门控。细节见 `paper/ch5/第五章_实验状态与记录_20260905.md` 与本地记忆（`qcc-coupling-amplify`）。
 
+## 4.5 渲染论文 PDF
+```bash
+cd paper/ch5 && python ch5cn_pdf.py [输出.pdf]
+```
+字体/图片/数据都已随仓库（`cjkfont/` `figs/` `data/`），路径相对脚本，换机即用。
+
 ## 5. 待办（按优先级）
 1. **按盘定 `qmix_gate_init`**（跨变量盘 0.5~1.0；通道独立盘 0.1），重训主表相关格并核对 MSE 不劣于现主表。
 2. 在新配置上重跑 **消融**（去掉量子核/耦合应显著变差）与 **表 8 的屏蔽实验**，确认结论一致。
