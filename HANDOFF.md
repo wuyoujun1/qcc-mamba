@@ -6,6 +6,8 @@ git clone git@github.com:wuyoujun1/qcc-mamba.git
 cd qcc-mamba && git checkout main     # 只有 main 一条主线
 ```
 
+> ⚠️ **注意：仓库里的代码只是参考快照，不是跑出论文结果的那一份。** 论文结果由工作副本 `/home/youjun/dataops_ws/` 跑出，两者不一致——仓库缺 `--qmix_norm raw_k`（论文最新理论）、`--qmix_msg`、`--qmix_ln_hp`、以及表 7 屏蔽实验要用的 `intervention_mask`，照本仓库跑不出论文主表。完整清单见 `README.md` 的「⚠️ 代码口径差异」。
+
 ## 2. 数据
 仓库自带 `dataset/`（gz 压缩）：ETTh1、ETTh2、ETTm1、ETTm2、Weather、ECL、Traffic、Exchange、Beijing-AQI。
 训练时按各盘传 `--root_path/--data_path`（ETT 家族 `./dataset/ETT-small/`，`--data custom` 的盘见各自日志模板）。

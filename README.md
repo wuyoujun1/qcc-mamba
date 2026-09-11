@@ -24,9 +24,53 @@ pip install -r requirements.txt          # 含 mamba_ssm / causal_conv1d / torch
 export OMP_NUM_THREADS=8                 # 本机必须，否则线程爆炸
 ```
 
+## ⚠️ 代码口径差异（读复现之前必看）
+**本仓库的代码只是参考快照，不是跑出论文结果的那一份，两者不一致。** 论文结果由工作副本 `/home/youjun/dataops_ws/` 跑出。后果：**照本仓库 clone 下来，跑不出论文的任何一格。**
+
+仓库 `main` 相对工作副本缺这些功能：
+
+| 缺失项 | 工作副本有 | 本仓库 |
+|---|---|---|
+| `--qmix_norm raw_k`（**论文最新理论**：去对角原始保真度核 K 直接做消息传播，不做 softmax / 温度 / 行归一化） | ✅ 已实现 | ❌ 未实现，传了直接抛 `ValueError`（本仓库只认 `avg/softmax/l1`） |
+| `--qmix_norm rawk_row`（去对角后行和归一化） | ✅ | ❌ |
+| `--qmix_msg H\|S\|HS`（消息来源，杠杆1） | ✅ | ❌ run.py 无此参数 |
+| `--qmix_ln_hp`（Hp 是否做 LN，杠杆2） | ✅ | ❌ run.py 无此参数 |
+| `intervention_mask`（推理期按比例屏蔽耦合 → 第五章**表 7**） | ✅ | ❌ |
+
+涉及文件：`qcc/quantum_mix.py`、`run.py`、`model/Q_S_Mamba.py`、`data_provider/data_loader.py`（后者是 pandas 新旧 API 写法差异）。
+
+另外，**论文正文的若干描述与代码（两份都是）对不上**，写/改正文时要留意：
+
+| 正文写法 | 代码实际 |
+|---|---|
+| 编码态经**两层相同的 U**演化，`\|ψ_v⟩ = U_v·U_v·\|χ_v⟩`（两层各含一次 CNOT） | 首层只做旋转、不纠缠；纠缠层数为 `D−1`。即 `D=2` 时只有 **1 个** CNOT 层，且两层角度来源不同（首层取 H、重上传取 S） |
+| 振幅通道 `p(h_v) = softmax(W_r·h_v) ∈ ℝ^32`（H→概率振幅、S→基态相位） | **没有 softmax 编码**。`proj_H`/`proj_S` 都是 `Linear(·→2N)`，输出直接当**每比特的 (θ,φ) 旋转角**，首层构造乘积态。不存在"H→32 维概率 / S→32 个自由相位"的两通道分工 |
+| 投影矩阵与线路旋转角**对每个变量独立可学习** | `proj_H`/`proj_S`/`W_q` 都是全变量**共享**的单个 `nn.Linear`；变量间差异只来自输入 |
+| `H′ = LN(H + γ·LN(H_p))` | gate 开时是 `H + γ·LN(H_p)`，**没有外层 LN** |
+| 去对角与温度缩放 `K ← (K−I)/T` 后 `softmax(K)` | offdiag 时把对角 logit 直接置为 `row.min()−1e6`，使**对角权重严格为 0**（2026-09-07 改） |
+| 3.2 主频 `argmax_{f≥1}` 只忽略直流 | 实际跳过 k=0 **和 k=1**（防去趋势后残余低频伪峰） |
+| `S_v` 维度恒为 2M | 带 `--delay_in_s` 时为 **2M+1**（脚本里普遍开着该开关） |
+| 3.2 的两级对齐是必备环节 | `--spectrum_time_align` / `--spectrum_freq_align` 都是 `store_true`，**默认关**；不开则不做相位校正、频率轴不归一 |
+
+**还有两个未决口径**（正文与实验哪边为准尚未拍板）：
+- `kernel_fn`：正文写保真度核 `K=|⟨ψ|ψ⟩|²`，但 `METHOD_ARCHITECTURE.md` 说最终架构用 `quantum_exp`（测地核＋可学习 κ）；主表逐格命令行已不可考。
+- 主表 QCCK-M 列（`qf2_*` 那批）当年是用 **softmax + T=0.1** 跑的，而正文现已改按 raw K 写；换口径后主表是否重跑未定。
+
 ## 复现（示例：ETTh1-96 训练 + 测试）
 先按 [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) 第 7 节把 `dataset/gz/*.csv.gz` 解压到 `/tmp` 并软链回 `dataset/`——仓库里只有 gz，`--root_path ./dataset/ETT-small/` 需要的是解压后的目录。
 
+**A. 论文最新口径**（`raw K` 那套）——**本仓库跑不了**，需要在工作副本 `/home/youjun/dataops_ws/` 下执行：
+```bash
+export OMP_NUM_THREADS=8
+python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data ETTh1 \
+  --root_path ./dataset/ETT-small/ --data_path ETTh1.csv --features M --target OT --freq 15min \
+  --seq_len 96 --label_len 48 --pred_len 96 --enc_in 7 --dec_in 7 --c_out 7 \
+  --e_layers 2 --d_model 256 --d_ff 256 --d_state 2 --learning_rate 0.00007 \
+  --qmix_layers 2 --n_qubits 5 --qmix_norm raw_k --offdiag --qmix_msg H --qmix_ln_hp 1 \
+  --qmix_gate --qmix_gate_init 0.1 --batch_size 32 --train_epochs 10 --patience 3
+```
+
+**B. 本仓库能跑通的示例**（旧口径：softmax 行归一化 + 温度 T）：
 ```bash
 export OMP_NUM_THREADS=8                # 必须
 python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data ETTh1 \
@@ -36,19 +80,19 @@ python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data 
   --qmix_layers 2 --n_qubits 5 --qmix_norm softmax --kernel_T 0.1 --offdiag \
   --qmix_gate --qmix_gate_init 0.1 --batch_size 32 --train_epochs 10 --patience 3
 ```
-关键开关（**以论文主表实际口径为准**）：
+关键开关：
 
-| 开关 | 主表/论文口径 | 说明 |
-|---|---|---|
-| `--qmix_norm` | `softmax` | 消息权重归一化方式，只实现 `avg` / `softmax` / `l1`，传其它值会在建模时直接抛 `ValueError` |
-| `--kernel_T` | `0.1` | 保真度核温度（softmax 分支） |
-| `--offdiag` | 开 | 去对角，在 `K - I` 上做 softmax，跨变量权重占主导 |
-| `--n_qubits` | `5` | 主表口径。注意 `scripts/**/Q_S_Mamba_*.sh` 里写的是 `2`，不是本论文口径 |
-| `--qmix_gate` / `--qmix_gate_init` | 开 / `0.1` | 混合门控与初值。门控尺度在验证集上选定，测试结果对其取值不敏感（变化小于 1%）；`0.5~1.0` 是耦合放大实验用的配置，**未用于主表** |
+| 开关 | 论文最新口径 | 本仓库 | 说明 |
+|---|---|---|---|
+| `--qmix_norm` | `raw_k` | 只支持 `avg` / `softmax` / `l1` | 传其它值在建 `QuantumMixLayer` 时抛 `ValueError` |
+| `--kernel_T` | —（raw K 不用温度） | `0.1` | 仅 softmax 分支使用 |
+| `--offdiag` | 开 | 开 | 去对角。本仓库里**只在 softmax 分支生效**，`avg`/`l1` 分支完全不用它 |
+| `--qmix_msg` / `--qmix_ln_hp` | `H` / `1` | ❌ 无此参数 | 杠杆 1 / 杠杆 2，只在工作副本里 |
+| `--n_qubits` | `5` | `5` | `scripts/**/Q_S_Mamba_*_vd.sh` 里写的是 `2`，不是本论文口径 |
+| `--qmix_gate` / `--qmix_gate_init` | 开 / 按盘定 | 开 / `0.1` | 耦合放大实验用 `0.5~1.0`（跨变量盘）或 `0.1`（通道独立盘）；旧主表用 `0.1` |
 
 > `--offdiag` 与 `--qmix_gate` 都是**无参数开关**，写成 `--offdiag True` 会被 argparse 当成多余参数直接报错。
-> 早期文档里出现过的 `--qmix_norm raw_k` 与 `--qmix_msg` / `--qmix_ln_hp` **在当前 main 的代码里不存在**：前者的取值不在 `avg/softmax/l1` 内会抛错，后两个参数 run.py 根本没有定义。
-> `scripts/` 下 `S_Mamba_*.sh` 是上游 S-Mamba 官方脚本，`Q_S_Mamba_*.sh` 是我们自己的脚本；两者超参均与主表口径不完全一致，复现主表请以上表为准。
+> `scripts/` 下 `S_Mamba_*.sh` 是上游 S-Mamba 官方脚本，`Q_S_Mamba_*.sh` 是我们自己的脚本；两者超参均与论文口径不完全一致。
 
 ## 渲染第五章 PDF
 ```bash

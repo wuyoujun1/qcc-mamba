@@ -91,6 +91,8 @@ cd qcc-mamba && export PYTHONPATH=.
 ```
 
 ## 10. 跑起来
+> ⚠️ 下面这条是**本仓库能跑通**的口径（旧口径：softmax + 温度 T）。论文最新口径是 `--qmix_norm raw_k` + `--qmix_msg` / `--qmix_ln_hp`，**本仓库的代码没实现**，需要在工作副本 `/home/youjun/dataops_ws/` 下跑。完整差异清单见 `README.md` 的「⚠️ 代码口径差异」。
+
 ```bash
 export OMP_NUM_THREADS=8
 python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data ETTh1 \
