@@ -24,6 +24,8 @@ pip install -r requirements.txt          # 含 mamba_ssm / causal_conv1d / torch
 export OMP_NUM_THREADS=8                 # 本机必须，否则线程爆炸
 ```
 
+> 🔧 **未解决的问题清单：[`docs/TOFIX.md`](docs/TOFIX.md)**（P0 是主表 S-Mamba 列与数据源对不上、正文"持平"说法站不住）
+
 ## ⚠️ 代码口径差异（读复现之前必看）
 **本仓库的代码只是参考快照，不是跑出论文结果的那一份，两者不一致。** 论文结果由工作副本 `/home/youjun/dataops_ws/` 跑出。后果：**照本仓库 clone 下来，跑不出论文的任何一格。**
 
