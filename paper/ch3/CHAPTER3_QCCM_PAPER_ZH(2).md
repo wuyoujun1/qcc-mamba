@@ -1,3 +1,6 @@
+> ⚠️ **DEPRECATED（勿引用）**：第三章旧稿，方法名仍写作 QCCM（师姐已明令全文改 **QCCK**）。
+> 现行权威：`paper/ch3/第三章修改版1.md`。
+
 ## 3 QCCM: Quantum Cross-Variable Coupling Module
 
 ### 3.1 模块总览
