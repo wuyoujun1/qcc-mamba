@@ -11,7 +11,7 @@
 | 文件 | 说明 |
 |---|---|
 | `paper/ch3/第三章修改版1.md` | **第三章现行**·逐句稿（QCCK：频域对齐 / QCCE / 量子核） |
-| `paper/ch4/第四章修改版1.md` | **第四章现行**·逐句稿（QCCK-M 网络与算法） |
+| `paper/ch4/第四章修改2.md` | **第四章现行**·逐句稿（QCCK-M 网络与算法） |
 | `paper/ch5/ch5cn_pdf.py` | **第五章定版生成器**，正文/表格/图注都在里面 |
 | `paper/ch5/第五章初稿_中文_20260909.pdf` | **第五章定版 PDF**（= 生成器当前输出；小节 5.1–5.5） |
 | `paper/ch5/第五章初稿_中文_20260905.pdf` | 生成器默认输出名，与上面那份内容一致（仅 PDF 内部 ID 不同） |
@@ -39,10 +39,10 @@
 | `paper/outline/RELATED_WORK_CITATIONS.md` | 相关工作引用 |
 | `paper/outline/QCC论文写作_skill.md` | 写作方法论 |
 
-## ⚠️ 旧口径，待清（仍留仓库，勿作依据）
-| 文件 | 问题 |
+## 论文大纲
+| 文件 | 说明 |
 |---|---|
-| `paper/outline/PAPER_OUTLINE_TKDE.md` | 大纲；§3 内嵌旧版第三章正文（QCCM / PAI），§5 仍列已证伪的浓度定理，且表号与定版不符。**章节结构部分仍有效，方法口径部分作废** |
+| `paper/outline/PAPER_OUTLINE_TKDE.md` | **只保留结构**（2026-09-11 重写）：标题、7 章布局、各章骨架、核心卖点。原内嵌的旧第三章正文（QCCM/PAI/因子分解）、§5 旧方法口径与已证伪的浓度定理均已移除；正文以 ch3/ch4/ch5 现行稿为准 |
 
 ## 2026-09-11 已删除（需要时用 `git show <旧提交>:<路径>` 取回）
 - 旧正文/旧理论：`EXPERIMENT_CHAPTER.md`、`THEORY_QUANTUM_INTERFACE.md`、`METHOD_ARCHITECTURE.md`、`paper/ch3/CHAPTER3_QCCM_PAPER_ZH(2).md`
