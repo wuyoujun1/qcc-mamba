@@ -43,7 +43,7 @@
 **段 5·引入我们的核心机制**：`To achieve this goal, a [量子/复值] scheme inspired by [先例] is attempted to compensate for the above shortcoming. [先例机制简述]. Obviously, the working mechanism of [先例] is somehow similar to [我们的对象], as it also involves [共同点]. However, [单用先例不够]. Thus a dramatic modification of this algorithm is necessary to [目标], which induces the three main propositions of this paper:`
 
 **段 6·贡献清单**（大纲三贡献）：
-`1. 提出 QCCM 模块` / `2. 提出 QCCK-M 网络` / `3. 实验效果更优且可解释`
+`1. 提出 QCCK 模块` / `2. 提出 QCCK-M 网络` / `3. 实验效果更优且可解释`
 
 **段 7·贡献详述 + 行文路线**：`The remainder of this paper is organized as follows. Section 2... Section 3... Section 4... Section 5... In Section 6, we draw a conclusion.`
 > ICWE 用的就是这个固定模板："theory about ... are introduced in Section 2. We describe ... in Section 3. Experimental results are shown in Section 4. In Section 5, we draw a conclusion."
@@ -67,15 +67,15 @@
 
 ---
 
-## 4. Method 段落范式（第3章 QCCM / 第4章 QCCK-M）
+## 4. Method 段落范式（第3章 QCCK / 第4章 QCCK-M）
 
 > 取自 Boson §2.2 + GQHAN §III。
 
 **节首动机句**：`In order to [目标], a [组件名] is [proposed/designed], which [一句话作用].`（ICWE/Boson 高频 "In order to ... is proposed"）
-> 大纲 3.2.1："为消除…环境差异，频域对齐以确定性变换…消除两类差异" → 此句式。
+> 大纲 3.2："为消除…环境差异，频域对齐以确定性变换…消除两类差异" → 此句式。
 
 **定义驱动**：
-`**Definition 1 (PAI 编码).** 记 b∈{0,1}⁵ 为...，变量 v 的量子态定义为：` → 公式 (3.2-6) → `由 Σp_b=1 立得 ‖ψ_v‖²=1，即该编码自动归一。`
+`**Definition 1 (QCCE 编码).** 记 b∈{0,1}⁵ 为...，变量 v 的量子态定义为：` → 公式 (3.2-6) → `由 Σp_b=1 立得 ‖ψ_v‖²=1，即该编码自动归一。`
 
 **命题/定理体例**：
 `**Proposition 1 (电路可编译性).** [陈述]. **证明思路：** [推导]. ∎`
@@ -147,7 +147,7 @@
 
 **只写第 2→5 章**：
 - 第2章 Related Work（§2.1-2.4 + Notation 表 + 必引区分）
-- 第3章 QCCM（3.1 Overview + 3.2 对齐与编码 + 3.3 量子核，插第三章架构图）
+- 第3章 QCCK（3.1 总览 + 3.2 频域对齐 + 3.3 QCCE 编码 + 3.4 量子核，插第三章架构图）
 - 第4章 QCCK-M（4.1 总览插第四章架构图 + 4.2 算法/loss/梯度）
 - 第5章 Experiments（5.1-5.6，**5.2 机制验证优先且最重**）
 

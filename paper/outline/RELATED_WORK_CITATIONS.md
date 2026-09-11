@@ -17,7 +17,7 @@
 - 文件：`refs/Two_End-to-End_Quantum-Inspired_Deep_Neural_Networks_for_Text_Classification.pdf`
 - cite key：`shi2023icwe`
 - 范式贡献：Hilbert 空间量子启发复词嵌入；$|\varphi\rangle=\sum_j r_j e^{ic_j}|e_j\rangle$；义词=多态量子粒子，句子=粒子干涉量子系统。GRU+attention+conv 端到端。
-- 落点：复振幅分解三件套来源（Related Work §2.2）；PAI 的"变量=量子态、跨变量消息=粒子干涉"本体论先例（Method §3.2.2）。
+- 落点：复振幅分解三件套来源（Related Work §2.2）；QCCE 的"变量=量子态、跨变量消息=粒子干涉"本体论先例（Method §3.3）。
 
 ### A2. QPFE-ERNIE — Pretrained Quantum-Inspired DNN for NLP 【组内·TCYB】
 - 作者：Jinjing Shi, Tian Chen, Wei Lai, Shichao Zhang, Xuelong Li
@@ -25,7 +25,7 @@
 - 文件：`refs/Pretrained_Quantum-Inspired_Deep_Neural_Network_for_Natural_Language_Processing.pdf`
 - cite key：`shi2024qpfe`
 - 范式贡献：复嵌入层=振幅嵌入（语义）+相位嵌入（短语交互/位置隐式特征）；预训练相位参数作先验加速拟合；$|t\rangle=\sum_i r_i e^{i\theta_i}|e_i\rangle$。
-- 落点："振幅=内容/语义、相位=上下文"共识（§2.2）；PAI 的 s 作确定性先验（detach）类比预训练相位思想（§3.2.2）。
+- 落点："振幅=内容/语义、相位=上下文"共识（§2.2）；QCCE 的 s 作确定性先验（detach）类比预训练相位思想（§3.3）。
 
 ### A3. MQN — Multimodal Quantum-inspired Network for Emotion Recognition 【组内·ESWA】
 - 作者：Zimeng Xiao, Jia Liao, Jinjing Shi*, Shichao Zhang, Xuelong Li
@@ -33,7 +33,7 @@
 - 文件：`refs/1-s2.0-S0957417425036796-main.pdf`
 - cite key：`xiao2025mqn`
 - 范式贡献：CFE（对话导向特征嵌入）振幅+相位嵌入多模态/说话人/位置信息；JIF 联合信息融合；QGRU 演化复依赖；密度矩阵测量。**关键 Eq.4**：$|\varphi\rangle=\sum_j z_j|k_j\rangle=\sum_j r_j e^{i\theta_j}|k_j\rangle$。相位加法通道：$\varphi_j=\text{pos}\cdot w_p^j+\text{spe}\cdot w_s^j+\theta_j$。
-- 落点：相位=可学习频率加法通道（§2.2）；PAI 的 $\theta(s)=W_\theta s$ 推广自 MQN 的离散词级到 SSM 隐状态级（§3.2.2）。
+- 落点：相位=可学习频率加法通道（§2.2）；QCCE 的 $\theta(s)=W_\theta s$ 推广自 MQN 的离散词级到 SSM 隐状态级（§3.3）。
 
 ### A4. PHL — Parameterized Hamiltonian Learning With Quantum Circuit 【组内·TPAMI】
 - 作者：Jinjing Shi, Wenxuan Wang, Xiaoping Lou, Shichao Zhang, Xuelong Li
@@ -42,7 +42,7 @@
 - 文件：`refs/tpami_phl.pdf`
 - cite key：`shi2023phl`
 - 范式贡献：参数化量子电路分解酉算子激发系统演化；迭代更新损失对电路参数梯度准备哈密顿系统；图像分割应用。
-- 落点："参数化量子电路+可学习参数"方向（§2.1 量子门/电路）；PAI 的 RZ∘RY 单级电路 + 可学习 $W_\theta$ 同源（§3.2.2 命题1）。
+- 落点："参数化量子电路+可学习参数"方向（§2.1 量子门/电路）；QCCE 的 RZ∘RY 电路 + 可学习 $W_\theta$ 同源（§3.3）。
 
 ### A5. Quantum Circuit Learning With Parameterized Boson Sampling 【组内·TKDE 投稿范式】
 - 作者：Jinjing Shi, Yongze Tang, Yuhu Lu, Yanyan Feng, Ronghua Shi, Shichao Zhang
@@ -67,7 +67,7 @@
 - 文件：`refs/GQHAN.pdf`
 - cite key：`zhaoGqhan`
 - 范式贡献：Grover 启发量子硬注意力机制 GQHAM（Flexible Oracle 解非可微 + Adaptive Diffusion Operator + QHAS 可视化）；PennyLane 实现；Fashion MNIST/CIFAR-10 二分类。
-- 落点：**量子注意力/混合机制的直接前身**，与本文 QCCM 的"量子核做跨变量混合"同范畴（§2.1 量子注意力/§2.2）；可解释性论证范式（K 可视化对标 QHAS）。
+- 落点：**量子注意力/混合机制的直接前身**，与本文 QCCK 的"量子核做跨变量混合"同范畴（§2.1 量子注意力/§2.2）；可解释性论证范式（K 可视化对标 QHAS）。
 
 > **三件套提炼**（Related Work §2.2 论述依据，自 ICWE/QPFE/MQN 提炼）：
 > 1. 复振幅分解 $z_j=r_j e^{i\theta_j}$（振幅=内容，相位=语境）；2. 相位加法通道；3. 测量 $p=|\langle\lambda|\varphi\rangle|^2$。
@@ -140,8 +140,8 @@
 | II §2.2 量子核方法 | `shi2023icwe`,`shi2024qpfe`,`xiao2025mqn`,`spe2026`,`trouillon2016complex`,`quack2024`,`haqjsk2024`,`zhaoGqhan` |
 | II §2.3 频域时序方法 | `fan2024`(必引区分),`wu2021autoformer`,`zhou2022fedformer`,`wu2023timesnet`,`yi2023frets`,`film2023`,`freDF2024`,`kim2022revin` |
 | II §2.4 时序预测/跨变量 | `wang2024smamba`,`liu2024itransformer`,`zeng2023crossformer`,`nie2023patchtst`,`zeng2023dlinear`,`wu2023timesnet` |
-| III §3.2.2 PAI | `xiao2025mqn`(Eq.4同构),`shi2024qpfe`(振幅=语义/相位=上下文),`shi2023icwe`(干涉本体),`rahimi2007rff`(相位=复傅里叶),`spe2026`(纯相位特例),`trouillon2016complex`(方向项) |
-| III §3.2.1 频域对齐 | `fan2024`(区分),`kim2022revin`(区分) |
+| III §3.3 QCCE | `xiao2025mqn`(Eq.4同构),`shi2024qpfe`(振幅=语义/相位=上下文),`shi2023icwe`(干涉本体),`rahimi2007rff`(相位=复傅里叶),`spe2026`(纯相位特例),`trouillon2016complex`(方向项) |
+| III §3.2 频域对齐 | `fan2024`(区分),`kim2022revin`(区分) |
 | IV QCCK-M | `wang2024smamba`,`freDF2024`,`shiBoson`(梯度范式) |
 | V 实验·基线 | `wang2024smamba` 及 B 表全部 |
 

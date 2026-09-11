@@ -1,6 +1,6 @@
 # 师姐 Reback 批注 + 用户写作总则（核心收敛版）
 
-> 命名基线：本章方法 **QCCK**、编码 **QCCE**、度量环节 **量子核**；正文不出现 QCCM（QCCM/Module 语义只留给第四章"层实例 QCCMLayer"这种工程组件）。
+> 命名基线：本章方法 **QCCK**、编码 **QCCE**、度量环节 **量子核**；正文不出现 QCCM（QCCM/Module 语义只留给第四章"层实例 QCCK Layer"这种工程组件）。
 
 ---
 
@@ -35,7 +35,7 @@
 | T5 | **C13 目的先行**：为解决什么问题，我们定义 A 与 B，其中 A 是什么、B 是什么、二者起什么作用 | `为（解决问题），我们定义了 A 与 B：A 是（…），B 是（…），二者（起…作用）。` | `为把内容(H)与上下文(S)统一编码进量子态，我们定义了振幅通道与相位通道：振幅通道把 H 映射为概率分布、决定各基态振幅；相位通道把 S 映射为各基态相位。` |
 | T6 | **C3+C4 产物交代**：给性质（回指公式可核验）+ 好处一句话 | 产物后紧跟：`（性质），（好处，一句话）` | `K 对角恒 1、取值 [0,1]、逐样本自适应；该可解释性使耦合可读、可诊断。` |
 
-**命名观（C1，独立一条，非模板）**：提"方法"的章/节不用 Module，用 **Kernel / Encoding**——Module 是工程组件词（`nn.Module`、Transformer module），强调的是接口；Kernel/Encoding 是方法词，强调的是数学对象与性质。K 是 fidelity kernel（可引 quantum kernel 一脉：Havlíček et al., Nature 2019），编码是 amplitude/phase encoding（QML 惯例）。组件语义留给第四章的 QCCMLayer。
+**命名观（C1，独立一条，非模板）**：提"方法"的章/节不用 Module，用 **Kernel / Encoding**——Module 是工程组件词（`nn.Module`、Transformer module），强调的是接口；Kernel/Encoding 是方法词，强调的是数学对象与性质。K 是 fidelity kernel（可引 quantum kernel 一脉：Havlíček et al., Nature 2019），编码是 amplitude/phase encoding（QML 惯例）。组件语义留给第四章的 QCCK Layer。
 
 ---
 
