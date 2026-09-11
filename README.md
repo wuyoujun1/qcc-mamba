@@ -59,7 +59,11 @@ python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿
 > 文件名是历史遗留：默认输出的 `..._20260905.pdf` 与 `..._20260909.pdf` 内容一致（仅 PDF 内部 ID 不同），改完正文重跑即可。
 > `第五章_完整修正版_95保留.tex` / `.pdf` 是**旧版**，小节编号为 5.6/5.7 且含**已删除的敏感性节**，勿据此写作。
 - 生成器 `paper/ch5/ch5cn_pdf.py`（reportlab）：正文/表格/图注都在脚本里；
-- 图在 `paper/ch5/figs/`（由 `ch5_winheat.py`、`ch5_sens_full.py` 等生成）；
+- 图在 `paper/ch5/figs/`。仓库里的造图脚本只有三个，**且它们的输出路径目前仍写死 `/home/youjun/paper/figs/`，换机要改**：
+  - `paper/ch5/ch5_winheat.py` → 耦合度-增益热力图；
+  - `paper/ch5/ch5_supp_20260909/gen_figs_stats.py` → 耦合核热力图 / ECDF；
+  - `paper/ch5/ch5_supp_20260909/gen_pred_adv.py` → 预测案例图。
+  - ⚠️ `figs/ch5_sens*.png` 是**已删除的敏感性节**的遗留图，定版正文不再引用（造图脚本已随该节一并移除）。
 - 中文字体随仓库：`paper/ch5/cjkfont/wqy-zenhei.ttf`（可用 `QCC_CJK_FONT` 覆盖）；
 - 主表数据 md 在 `paper/ch5/data/`（可用 `QCC_DATA_DIR` 覆盖）；
 - 依赖：`reportlab`、`pillow`（已加入 requirements）。

@@ -96,9 +96,12 @@ export OMP_NUM_THREADS=8
 python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data ETTh1 \
   --root_path ./dataset/ETT-small/ --data_path ETTh1.csv --features M --target OT --freq 15min \
   --seq_len 96 --label_len 48 --pred_len 96 --enc_in 7 --dec_in 7 --c_out 7 \
-  --qmix_layers 2 --n_qubits 5 --qmix_norm raw_k --offdiag True --qmix_gate True --qmix_gate_init 0.5 \
-  --batch_size 32 --train_epochs 10 --patience 3
+  --e_layers 2 --d_model 256 --d_ff 256 --d_state 2 --learning_rate 0.00007 \
+  --qmix_layers 2 --n_qubits 5 --qmix_norm softmax --kernel_T 0.1 --offdiag \
+  --qmix_gate --qmix_gate_init 0.1 --batch_size 32 --train_epochs 10 --patience 3
 ```
+> `--offdiag` 与 `--qmix_gate` 是**无参数开关**，写成 `--offdiag True` 会被 argparse 当成多余参数直接报错。
+> 主表口径的完整开关表见 README「复现」一节（`--qmix_norm` 只支持 `avg/softmax/l1`）。
 
 ## 坑位速查
 | 症状 | 原因 | 正解 |

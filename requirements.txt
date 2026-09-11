@@ -3,6 +3,12 @@ numpy==1.26.4
 matplotlib==3.7.0
 torch==2.0.1
 reformer-pytorch==1.4.4
+# 代码里直接 import，装环境和跑实验都要
+pandas
+einops
+setproctitle
+# 5.x 删了 GreedySearchDecoderOnlyOutput，reformer-pytorch 会 import 失败
+transformers==4.40.0
 # mamba-ssm / causal-conv1d 需装预编译 wheel（cu118 + cxx11abiFALSE），见 docs/ENVIRONMENT.md 第 5 节
 mamba-ssm==1.2.0
 # 论文 PDF 渲染
