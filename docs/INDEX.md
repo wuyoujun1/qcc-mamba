@@ -42,18 +42,14 @@
 ## ⚠️ 旧口径，待清（仍留仓库，勿作依据）
 | 文件 | 问题 |
 |---|---|
-| `paper/outline/PAPER_OUTLINE_TKDE.md` | 大纲；§3 内嵌旧版第三章正文（QCCM/PAI），§5 仍列已证伪的浓度定理 |
-| `paper/outline/OPUS_WRITING_BRIEF.md` | 通篇 QCCM / QuantumMixLayer / PAI 旧命名 |
-| `paper/ch5/第五章修改与实验补强建议.md` | 按旧表号/图号（表 6/9、图 3/4/5）与"温度 T 视界自适应"写 |
-| `paper/ch5/第五章实验重设计.md` | 同上，含已删的敏感性节设计 |
-| `paper/ch5/第五章行文骨架_20260904.md` | 含"5.6 敏感性"骨架、A1–A4 第二套语义 |
-| `paper/ch5/第五章_实验状态与记录_20260905.md` | 部分数字与定版不符（R1/R3、表号） |
+| `paper/outline/PAPER_OUTLINE_TKDE.md` | 大纲；§3 内嵌旧版第三章正文（QCCM / PAI），§5 仍列已证伪的浓度定理，且表号与定版不符。**章节结构部分仍有效，方法口径部分作废** |
 
 ## 2026-09-11 已删除（需要时用 `git show <旧提交>:<路径>` 取回）
-`EXPERIMENT_CHAPTER.md`、`THEORY_QUANTUM_INTERFACE.md`、`METHOD_ARCHITECTURE.md`、
-`paper/ch3/CHAPTER3_QCCM_PAPER_ZH(2).md`、`paper/ch3/第三章架构图的文字描述.md`、`paper/ch4/第四章架构图文字描述.md`、
-`paper/ch5/第五章_完整修正版_95保留.tex` / `.pdf`、`paper/ch5/第五章_隔夜运行_状态_20260905.md`、
-`paper/ch5/figs/ch5_sens*.png|pdf`（已删敏感性节的遗留图）。
+- 旧正文/旧理论：`EXPERIMENT_CHAPTER.md`、`THEORY_QUANTUM_INTERFACE.md`、`METHOD_ARCHITECTURE.md`、`paper/ch3/CHAPTER3_QCCM_PAPER_ZH(2).md`
+- 旧架构图说明：`paper/ch3/第三章架构图的文字描述.md`、`paper/ch4/第四章架构图文字描述.md`
+- 第五章旧版：`第五章_完整修正版_95保留.tex` / `.pdf`、`第五章_隔夜运行_状态_20260905.md`
+- 旧设计/记录稿：`paper/outline/OPUS_WRITING_BRIEF.md`、`paper/ch5/第五章修改与实验补强建议.md`、`第五章实验重设计.md`、`第五章行文骨架_20260904.md`、`第五章_实验状态与记录_20260905.md`
+- 遗留图：`paper/ch5/figs/ch5_sens*.png|pdf`（已删敏感性节的图）
 
 ## 被引用但不在仓库的文件
 `BACKBONE_CONFIG.md`、`MAIN_AND_ABLATION_TABLES.md`、`PLOTS_INDEX.md`、`40CELL_RESULTS.md`、`baseline_local.md`、`run_slow.py`、`run_parallel.sh`
