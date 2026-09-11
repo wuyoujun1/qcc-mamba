@@ -1,0 +1,973 @@
+Parameterized Hamiltonian Learning
+With Quantum Circuit
+Jinjing Shi , Member, IEEE, Wenxuan Wang, Student Member, IEEE, Xiaoping Lou , Member, IEEE,
+Shichao Zhang , Senior Member, IEEE, and Xuelong Li , Fellow, IEEE
+Abstract— Hamiltonian learning, as an important quantum machine learning technique, provides a signiﬁcant approach for
+determining an accurate quantum system. This paper establishes parameterized Hamiltonian learning (PHL) and explores its
+application and implementation on quantum computers. A parameterized quantum circuit for Hamiltonian learning is ﬁrst created by
+decomposing unitary operators to excite the system evolution. Then, a PHL algorithm is developed to prepare a speciﬁc Hamiltonian
+system by iteratively updating the gradient of the loss function about circuit parameters. Finally , the experiments are conducted on
+Origin Pilot, and it demonstrates that the PHL algorithm can deal with the image segmentation problem and provide a segmentation
+solution accurately . Compared with the classical Grabcut algorithm, the PHL algorithm eliminates the requirement of early manual
+intervention. It provides a new possibility for solving practical application problems with quantum devices, which also assists in solving
+increasingly complicated problems and supports a much wider range of application possibilities in the future.
+Index Terms— Quantum machine learning, parameterized hamiltonian learning (PHL), parameterized quantum circuit, Hamiltonian learning
+algorithm, image segmentation
+Ç
+1I NTRODUCTION
+Q
+UANTUM computation has attracted considerable scien-
+tiﬁc attention due to its potential to address some fun-
+damental problems, such as factoring integers or ﬁnding an
+unordered set of data. Since Deutsch published the quan-
+tum computer construction theory in 1985, quantum com-
+puters have advanced at a breakneck pace. The ﬁrst optical
+quantum computer in the world was created in 2017. A 127-
+qubit quantum computer has been developed by IBM until
+2021, which marks a new milestone in the development of
+quantum computing. Recently, there has been a rise of inter-
+est in quantum machine learning and its application [1]. For
+example, Xiao et al. proposed a generalized negation
+method for quantum basic belief assignment [2]. Li et al.
+designed a method based on the quantum dots to improve
+the the accuracy of electronic nose [3]. Mach.et al. intro-
+duced quantum biomimetics, which aims at establishing
+analogies between biological and quantum systems, to look
+for previously inadvertent connections that may enable use-
+ful applications [4]. Hamiltonian learning (HL) as an impor-
+tant quantum machine learning technique was proposed in
+2014 to perceive an unknown physical system by learning
+its Hamiltonian that is a necessary parameter that expresses
+the energy of a physical system [5]. It provides an important
+idea to solve the essential issue for preparing and measur-
+ing a physical system, where the physical state of a system
+forms the basis for a large number of potential applications
+[3]. Subsequently, it has received much interest in the appli-
+cation of quantum state preparation that Hamiltonian learn-
+ing algorithm (HLA) [5] is designed to learn a quantum
+system with the Ising model by updating evolution time. In
+2020, Sahinoglu et al. completed the Hamiltonian simula-
+tion in the low energy subspace by reducing the complexi-
+ties of product formulas [6]. HLA has been improved in the
+calculation accuracy and elimination of noise effects in
+recent years. Youle et al. presented a hybrid quantum-classi-
+cal Hamiltonian learning method to avoid the challenge of
+estimating von Neumann entropy in free energy minimiza-
+tion [7]. Zubida et al. designed efﬁcient measurement meth-
+odologies based on short-time dynamics to limit the effect
+of noise on the accuracy of Hamiltonian measurements [8].
+A series of improvement approaches for HLA extensively
+promotes the research process of exploring the state of
+/C15 Jinjing Shi, Wenxuan Wang, and Shichao Zhang are with the School of
+Computer Science and Engineering, Central South Univerisity, Changsha 410083,
+China. E-mail: {shijinjing, wangwenxuan0524}@csu.edu.cn, zhangsc@mailbox.
+gxnu.edu.cn.
+/C15 Xiaoping Lou is with the College of Information Science and Engineering,
+Hunan Normal University, Changsha 410081, China.
+E-mail: louxiaoping@hunnu.edu.cn.
+/C15 Xuelong Li is with the School of Artiﬁcial Intelligence, Optics and Elec-
+tronics (iOPEN), Northwestern Polytechnical University, Xi’an 710072,
+China, and also with the Key Laboratory of Intelligent Interaction and
+Applications, Ministry of Industry and Information Technology, North-
+western Polytechnical University, Xi’an 710072, China. E-mail: li@nwpu.
+edu.cn.
+Manuscript received 2 June 2022; revised 16 August 2022; accepted 21 August
+2022. Date of publication 31 August 2022; date of current version 3 April 2023.
+This work was supported in part by the National Natural Science Foundation of
+China under Grants 61972418, 62272483, 61871470, 61872390, and
+61836016, in part by the Natural Science Foundation of Hunan Province under
+Grant 2020JJ4750, in part by the Special Foundation for Distinguished Young
+Scientists of Changsha under Grant kq1905058, in part by CCF-Baidu Open
+Fund under Grant CCF-BAIDUOF2021031, in part by the Fundamental
+Research Funds for Central Universities of Central South University under
+Grant 2022XQLH014, and in part by Postgraduate Scientiﬁc Research Innova-
+tion Project of Hunan Province (2022).
+(Corresponding author: Shichao Zhang.)
+Recommended for acceptance by S. Zilles.
+This article has supplementary downloadable material available at https://doi.
+org/10.1109/TPAMI.2022.3203157, provided by the authors.
+Digital Object Identiﬁer no. 10.1109/TPAMI.2022.3203157
+6086 IEEE TRANSACTIONS ON PATTERN ANAL YSIS AND MACHINE INTELLIGENCE, VOL. 45, NO. 5, MAY 2023
+© 2022 The Authors. This work is licensed under a Creative Commons Attribution 4.0 License. For more information, see https://creativecommons.org/l icenses/by/4.0/
+quantum systems. However, the capability of HLA in com-
+puting and application has not been fully explored in terms
+of executing it on quantum computers. In general, the above
+HLA [5] only describe a theoretical model for creating quan-
+tum circuits for HL without presenting the approach for
+quantum gate construction in the design of actual circuits.
+As a result, the absence of suitable circuits for HLA may
+limit its implemention on quantum computers and impede
+its progress. Thus constructing an appropriate quantum cir-
+cuit to characterize the system evolution process of HLA
+becomes a signiﬁcant task.
+Fortunately, we discover that parameterized quantum
+circuit (PQC) [9], which can be used to train and optimize
+quantum circuits by lowering a loss function on the parame-
+ter in the circuits until convergence, has potential to com-
+plete the task. PQC can introduce parameters into the
+decomposition of unitary operators, accelerating the con-
+struction of quantum circuits for HLA. Lots of quantum
+approaches based on PQC have been utilized to complete
+several application tasks on quantum computers, such as
+training Boson sampling [10], improving principal compo-
+nent analysis [11] and implementing chemical measurement
+[12]. PQC has the ability to characterize quantum algo-
+rithms [9], and it may realize exciting applications with the
+improvement of quantum computers. The purpose of this
+paper is to ﬁgure out how to build a parameterized quan-
+tum circuit for HL that allows quantum computers to exe-
+cute HLA.
+A method for efﬁciently constructing parameterized quan-
+tum circuits to realize HLA on quantum computers is pro-
+posed, abbreviated as parameterized Hamiltonian learning
+(PHL), in which the created quantum circuit for parameter-
+ized Hamiltonian learning algorithm (PHLA) excites the pro-
+cess of system evolution and the training is carried out
+iteratively by updating the gradient of the loss function asso-
+ciated with the circuit parameters with gradient-based opti-
+mization. Moreover, inspired by an accurate edge detector
+using richer convolutional features designed by Liu et al. [13],
+we prove PHLA can be applied to solve the image segmenta-
+tion problem with experiments on Origin Pilot [14] and a suc-
+cessful segmentation result is derived effectively. It also
+indicates the proposed PHL has a broad range of applications
+in material production and condensed matter potentially.
+The main contributions of this work are summarized as
+follows.
+/C15 PHL and its parameterized quantum circuit are pro-
+posed for executing HLA on the quantum com-
+puters, which can precisely represent the system
+evolution. The PHL is impressive in quantum state
+tomography and state preparation as a quantum
+machine learning model.
+/C15 PHLA is introduced for training the parameters of
+quantum circuits to produce the ﬁnal quantum sys-
+tem with a speciﬁed Hamiltonian. The PHLA can be
+impletemented on quantum devices to solve the
+image segmentation problem and has potential to be
+applied in other applications.
+The remainder of this paper is organized as follows.
+Related studies and fundamental principles are summarized
+in Section 2. PHL and PHLA are proposed in Section 3. The
+experiment and discussion are discussed in Section 4.
+Finally, the conclusion is drawn in Section 5.
+2R ELATED WORK
+In this section, we ﬁrst introduce the preliminary of quan-
+tum mechanics, then review the Hamiltonian learning algo-
+rithm and parameterized quantum circuit. The notations
+are summarized in Table 1.
+2.1 Preliminary
+The physical quantities of PHL method based on quantum
+mechanics are explained as follows.
+Hamiltonian. In quantum mechanics, the Hamiltonian H
+represents the energy of the system, which is an essential
+parameter in determining the state of a quantum system [5].
+It comes from the stationary Schr €odinger equation in
+Eq. (1), which is the core of quantum mechanics
+/C0 /C22h2
+2mr2þ Vð~rÞ
+/C20/C21
+cð~rÞ¼ Ecð~rÞ; (1)
+wherer is the gradient operator, cð~rÞ is the quantum state,
+/C22h is the Planck constant, m is a constant in quantum mechan-
+ics and vð~rÞ is the wave function. ½/C0 /C22h2
+2mr2þ Vð~rÞ/C138 is the
+Hamiltonian that usually represented by ^H. The energy
+eigenequation of the quantum system can be expressed as
+^Hcð~r; tÞ¼ Ecð~r; tÞ; (2)
+where E and c are the eigenvalue and eigenfunction of the
+operator ^H respectively, t is the time and ~r is the space vec-
+tor. During the system evolution, the energy in the wave
+function consistently follows Eqs. (1) and (2).
+System Evolution. System evolution refers to the process
+that a quantum system changes constantly, in which lots of
+intermediate statesjcti are produced , where n is the num-
+ber of particles, t is the time, jci is the quantum state , /C10 is
+the direct product symbol. In quantum mechanics, the state
+of a particle is uncertainty, which continually changes and
+ﬂuctuates [15]. When a quantum system is adiabatically
+excited, the Hamiltonian of intermediate state Ht satisﬁes
+the Eq. (3), according to the adiabatic theorem
+Ht¼ 1/C0 t
+T
+/C18/C19
+Hbþ t
+T Hp; (3)
+where Hb is the Hamiltonian of initial quantum system and
+Hp is the Hamiltonian of ﬁnal quantum system , t represents
+TABLE 1
+Notations
+Notation Description
+H Hamiltonian
+t Time
+U Unitary Operator
+jci Quantum State
+RyðuÞ Quantum Rotation Y Gate
+RzðuÞ Quantum Rotation Z Gate
+sy Pauli Y Gate
+sz Pauli Z Gate
+SHI ET AL.: PARAMETERIZED HAMILTONIAN LEARNING WITH QUANTUM CIRCUIT 6087
+the time of evolution and T is the temperature for the sys-
+tem [3]. In quantum computation, the parameters of the
+quantum circuit and the quantum system both change over
+time in a similar ways, making the two synchronized and
+compatible.
+Unitary Operator.The Unitary Operator is a bounded linear
+operator U deﬁned in the Hilbert space [16], which satisﬁes
+U/C3 U¼ UU/C3 ¼ I; (4)
+where U/C3 is the Hermitian transpose of U and I is the iden-
+tity operator. A unitary transformation is an isomorphism
+between two Hilbert spaces, i.e., U : H1! H2, where H1
+and H2 are Hilbert spaces.
+2.2 Hamiltonian Learning Algorithm
+The Hamiltonian learning algorithm (HLA) proposed by
+Nathan et al. in 2014 is able to derive physical system with
+speciﬁc Hamiltonian by updating the time t of evolution
+and the update rule [5] can be expressed as
+t¼ Hxxxxxxx/C0ðÞ /C0 Hxxxxxxx0ðÞkk /C0 1; (5)
+where the parameters xxxxxxx/C0 , xxxxxxx0 are the prior knowledge in
+Bayesian inference, Hðxxxxxxx/C0 Þ and Hðxxxxxxx0Þ are the Hamiltonian in
+intermediate states jcti. As shown in Fig. 1, the circuits of
+HLA consist of two major components: trusted simulator
+and untrusted simulator, which are constructed according
+to the Bayes rule. Under the control of the SWAP gate, the
+system evolution is excited by continuous reversal of the
+two simulators to derive the speciﬁc ﬁnal system and D is
+the posterior distribution in Bayes.
+The framework of the Hamiltonian learning algorithm
+can be summarized in Fig. 2 [5], which consists of four parts:
+initializing the quantum system, system evolution, Bayesian
+optimization and obtaining the ﬁnal generated quantum
+system. It determines the Hamiltonian Hp based on the Ising
+model [17] in Eq. (6) as the Hamiltonian in ﬁnal state, i.e.,
+Hp¼
+XN
+n¼1
+xnsx
+nþ
+XN
+n¼1
+xnsz
+n/C10 sz
+n; (6)
+where ”/C10 ” is the direct product symbol in quantum com-
+puting, sx
+n, sz
+n are the Pauli operators, n¼ 1; 2; ... ;N and N
+is number of particles and x is the constant coefﬁcient.
+First, HLA selects initial quantum system with Hamilto-
+nian Hb based on the current level of uncertainty in the Ham-
+iltonian of quantum system. After that, the system evolution
+is carried out that the trusted quantum simulator in Fig. 1 is
+used to effectively compute the likelihood of the measure-
+ment outcome occurring if each of the hypothetical models is
+true. Then Bayesian optimization is applied to update the
+parameter of time t, resulting in an updated probability dis-
+tribution derived as the posterior distribution D. Finally, the
+quantum system can be derived the with Hamiltonian Hp [5].
+3P ARAMETERIZED HAMILTONIAN LEARNING
+This section provides a parameterized Hamiltonian learning
+model (PHL) and a parameterized Hamiltonian learning
+algorithm (PHLA). We ﬁrst present the PHL and the con-
+struction of its parameterized quantum circuit and then
+introduce PHLA.
+3.1 PHL Model
+Fig. 3 depicts the framework of the PHL, where the initial
+system evolves into the ﬁnal state under adiabatic condi-
+tions. The system evoluntion in PHL fulﬁlls the adiabatic
+theorem [15] that there is no mutual energy transmission or
+exchange between the quantum system and the outside
+world. It is quite different from the HLA that we construct a
+parameterized quantum circuit which can excite the system
+evolution effectively, where the parameters are variable and
+can be updated iteratively. In PHL, the initial quantum sys-
+tem statejcini corresponds to a simple Hamiltonian Hb, i.e.,
+Hb¼
+XN
+n¼1
+sy
+n; (7)
+where Hb is the sum of the Pauli Y operators, n¼
+1; 2; 3; ... ;N and N is number of particles that determines the
+number of qubits to be used. Under the excitation of PHL, the
+Hamiltonian in the system adiabatically develop from Hb to
+the appropriate complex HamiltonianHp [15], and the Hamil-
+tonian of intermediate statejcti satisﬁes Eq. (3). In PHL, we
+anticipate the ultimate HamiltonianHp takes the form
+Hp¼
+XN
+n¼1
+1
+2 I/C0 p
+2 sz
+n/C10 sz
+n
+/C16/C17
+; (8)
+where I is the Identity matrix, sz is the Pauli Z operator, n¼
+1; 2; 3; ... ;N and N is the number of particles that deter-
+mines the number of qubits to be used. The Hamiltonian Hp
+satisﬁes the Ising model in Eq. (6).
+PHL derives the speciﬁc quantum system by performing
+the following steps: Before the system evolves, the Hamilto-
+nian Hb and Hp should be determined and parameters a, b
+are random. Initial system state with Hb completes a system
+evolution process by PQC that consists of Hadamard gate,
+Pauli X gate, RyðaÞ gate and CNOT- RzðbÞ gate, resulting in
+the intermediate statejcti with Hamiltonian Ht. The system
+evolution is spontaneous and continuous. By comparing the
+Fig. 1. The quantum circuit of quantum Hamiltonian learning. The state
+of the untrusted simulators is swapped and the trusted simulator
+attempts to invert the evolution [5].
+Fig. 2. The framework of Hamiltonian learning algorithm.
+6088 IEEE TRANSACTIONS ON PATTERN ANAL YSIS AND MACHINE INTELLIGENCE, VOL. 45, NO. 5, MAY 2023
+gaps between Ht and Hp, PHL determines whether the
+intermediate state is the one we wish to derive. If the gap is
+smaller than /C15(denote /C15as a minimal algebra), the interme-
+diate state is the ﬁnal state. If the gap is larger than /C15, the
+intermediate state is reintroduced into the circuit for evolu-
+tion, while the PQC parameters are updated.
+3.2 Quamtum Circuit of PHL
+Quantum gates can be represented mathematically as uni-
+tary operators U. The quantum circuit of PHL is based on
+the accumulation of the unitary transformations with
+parameters a and b as the generator in Uða; bÞ
+Uða; bÞ¼
+YM
+r¼1
+UH b; ar
+/C0/C1
+UH p; br
+/C0/C1
+; (9)
+where r¼ 1; 2; 3; ... ;M and M is the step of evolution, a
+and b are parameters that need to be updated, ar and br
+represent the parameters of quantum circuits about the r-th
+step of the evolution. The quantum circuit corresponding to
+each step is the product of the unitary transformation about
+UðHb; arÞ and UðHp; brÞ. The formula of them are presented
+in Eqs. (10) and (11) respectively
+UH b; ar
+/C0/C1
+¼ e/C0 iHbar ; (10)
+UH p; br
+/C0/C1
+¼ e/C0 iHpbr ; (11)
+where i is the imaginary number, Hb and Hp are Hamilto-
+nian in Eqs. (7) and (8) respectively. We can prove that the
+unitary transformation about UðHb; arÞ of r-th step can be
+deduced as a series of RyðaÞ gates by bringing Hamiltonian
+Hb from Eq. (7) into UðHb; arÞ as shown in Eq. (12)
+UH b; ar
+/C0/C1
+¼ e/C0 iHbar
+¼ e/C0 i
+PN
+n¼1 sy
+nar
+¼
+YN
+n¼1
+e/C0 isy
+nar
+¼
+YN
+n¼1
+Ry 2ar
+/C0/C1
+; (12)
+where n¼ 1; 2; 3; ... ;N and N is number of particles that
+determines the number of qubits to be used. Meanwhile
+UðHp; brÞ in Eq. (11) can be deduced as a series of CNOT
+gates introduced in the Appendix, (available online), and
+RzðbÞ gates. The speciﬁc deduction is in Eqs. (13) and
+(14)
+UH p; br
+/C0/C1
+¼ e/C0 iHpbr
+¼ e/C0 i
+PN
+n¼1
+1
+2 I/C0 p
+2szn/C10 sznðÞ br
+¼
+YN
+n¼1
+e/C0 iIbr
+2
+YN
+n¼1
+eipbr
+4 szn/C10 szn ; (13)
+where n¼ 1; 2; 3; ... ;N and N is number of particles,
+QN
+n¼1 e/C0 iIbr
+2 is a constant and QN
+n¼1 eipbr
+4 szn/C10 szn can be carried
+out as shown in Eq. (14):
+YN
+n¼1
+eipbr
+4 szn/C10 szn ¼
+YN
+n¼1
+eipbr
+4 00 0
+0 e/C0 ipbr
+4 00
+00 e/C0 ipbr
+4 0
+00 0 eipbr
+4
+2
+666664
+3
+777775
+¼
+YN
+n¼1
+1000
+0100
+0001
+0010
+2
+6664
+3
+7775
+eipbr
+4 000
+0 e/C0 ipbr
+4 00
+00 ei
+pbr
+4 0
+000 e/C0 ipbr
+4
+2
+666664
+3
+777775
+1000
+0100
+0001
+0010
+2
+6664
+3
+7775
+¼
+YN
+n¼1
+CNOTGateRz /C0 2
+p br
+/C18/C19
+CNOTGate:
+(14)
+For example, if the step of evolution M¼ 1 and we use
+ﬁve qubits N¼ 5, the quantum circuit constructed by PHL
+is shown in Fig. 4, where Hadamard gate and Pauli X gate
+are used to generate entangled states and stabilize the cir-
+cuits, which are introduced in the Appendix, available in
+the online supplemental material. If the step of evolution M6
+¼ 1, we need to repeat the circuits. In summary, the initial
+state jc0i can evolve to the intermediate state jcti after
+exciting by the parameterized quantum circuits constructed
+by the unitary transformation about Uða; bÞ in Eq. (9). When
+the number of step M is increased, it becomes more accurate
+in the result of system evolution.
+Fig. 3. The parameterized Hamiltonian learning model. We construct an initial quantum system jcini with Hamiltonian of Hb and hope that the system
+will evolve through the parameterized quantum circuits based on the RyðaÞ gate and the CNOT - RzðbÞ gate to generate the ﬁnal quantum system
+jcouti with the Hamiltonian Hp.
+SHI ET AL.: PARAMETERIZED HAMILTONIAN LEARNING WITH QUANTUM CIRCUIT 6089
+3.3 Parameterized Hamiltonian Learning Algorithm
+We propose a parameterized Hamiltonian learning algo-
+rithm (PHLA) based on PHL by introducing a gradient
+descent optimizer to update the parameters in quantum cir-
+cuits, depicted in Fig. 5. In PHLA, the output result is char-
+acterized by calculating the Hamiltonian expectation of the
+system. The initial quantum system jcini is developed to
+the intermediate state. After calculating the expectation of
+the Hamiltonian Ht in intermediate state and the loss func-
+tion of the PQC, we update the parameters in quantum cir-
+cuit. In the end, the ﬁnal state is with the highest
+expectation.
+The Algorithm 1 illustrates the pseudocode of the PHLA,
+where we take Hb;H p;/C24 ;g as input where /C24is the number of
+iteration step, Hb and Hp are Hamiltonian in Eqs. (7) and (8)
+separately,g is the adaptive learning rate in optimizer,N is the
+number of qubits to be used, M is the step of evoluntion. The
+output are the ﬁnal quantum statejci and the expectationE of
+Hamiltonian. The parametersa and b are radom in the begin-
+ning. Hb and Hp statisfy Eqs. (7) and (8)r e s p e c t i v e l y .W eu s e
+the QOP designed by the Origin Quantum Lab to calculate the
+expectation E of the Hamiltonian [14]. Input parameters of
+QOP are the HamiltonianHp, quantum circuits, sets of qubits,
+and the Hamiltonian Ht of intermediate state. Output of QOP
+are the expectation E of the Hamiltonian and loss function
+Lða; bÞ [14]. The expectationE is calculated in Eq. (15):
+E¼ 0 CyHC
+/C12/C12 /C12/C120
+/C10/C11
+¼h cjHjci; (15)
+where C is the measurement operator, jci is the quantum
+state. QOP is composed of two components: qop and qop
+pmeasure [14].
+Algorithm 1. The Algorithm of PHLA
+Input: the initial Hamiltonian Hb, the ﬁnal Hamiltonian Hp, the
+number of iteration step /C24, the parameter g, the number of
+qubits N, the step of evoluntion M.
+Output: the ﬁnal quantum state jci and the expectation E of
+Hamiltonian.
+Step 1: Prepare the initial quantum system with the Hamilto-
+nian Hb.
+Step 2: Use Hb;H p; a; b for the decomposition of unitary oper-
+ators to establish parameterized quantum circuits.
+Step 3: The initial quantum system evolves through quantum
+circuits of PHL to the intermediate quantum system.
+Step 4: Use QOP function [14] to calculate the expectation E
+of Hamiltonian in the intermediate state and compare it with
+the expectation E of Hp then generate the loss function
+Lða; bÞ.
+Step 5: Use the gradient-descent optimization method to
+update a; b.
+For j</C24 :
+@Lðaj;bÞ
+@aj
+¼
+LðajþDj;bÞ/C0Lð aj/C0 Dj;bÞ
+2Dj
+;
+aj aj/C0 g
+@Lðaj;bÞ
+@aj
+;
+@Lða;bjÞ
+@bj
+¼
+Lða;bjþDjÞ/C0Lð a;bj/C0 DjÞ
+2Dj
+;
+bj bj/C0 g
+@Lða;bjÞ
+@bj
+;
+The function of qop is to output the expectation E of the
+Hamiltonian, while the function of qop pmeasure is to com-
+pute the loss function. We calculate the gradient for parame-
+ters a and b inLða; bÞ using the batch gradient descent
+method [18]. In the case of aj, the gradient is shown in
+Eq. (16).
+@Lðaj; bÞ
+@aj
+¼Lðajþ Dj; bÞ/C0Lð aj/C0 Dj; bÞ
+2Dj
+; (16)
+where Dj is a small parameter in the j-th direction, j¼
+1; 2; 3; ... ;/C24 and /C24 is the number of iteration step. aj is
+updated with Eq. (17) [10].
+aj aj/C0 g @Lðaj; bÞ
+@aj
+; (17)
+where the g is the adaptive learning rate.
+Fig. 4. The example of the quantum circuit in PHL. In this example, we deﬁne the step of evolutionM¼ 1 and use ﬁve qubits N¼ 5 to build the circuit.
+Fig. 5. The framework of the PHLA. We design a parameterized quantum
+Hamiltonian learning algorithm based on PHL, where the gap between
+the intermediate state and ﬁnal state is calculated using the method of
+comparing the expectation of Hamiltonian in the quantum system. The
+ultimate state is with the highest expectation value.
+6090 IEEE TRANSACTIONS ON PATTERN ANAL YSIS AND MACHINE INTELLIGENCE, VOL. 45, NO. 5, MAY 2023
+4E XPERIMENT AND DISCUSSION
+The development of quantum technology faces a challenge
+in combining quantum computer advantages with practi-
+cal applications. PHLA has the potential to execute on
+quantum computers and will soon have a wider range of
+applications in the future. We attempted to adapt PHLA to
+applications other than the pr eparation of physical sys-
+tems. After many explorat ions, we ﬁnd PHLA can be
+applied to solve image segme ntation problems [13]. This
+section provides the experi ment based on PHL and discus-
+sion. We ﬁrst present the experiment in image segmenta-
+tion ﬁeld which shown that PHL has the potential to give
+accurate image segmentatio n results and then introduce
+the discussion.
+4.1 Experiment Setting
+Fig. 6 shows the experimental setup. In order to establish
+the correspondence between the original image and the
+quantum system, we deal with the gray-scale images, which
+is abstracted into an undirected weighted network graph G
+in Fig. 6d. We can use the position of qubits in PHLA to
+present the information in original image, as shown in
+Fig. 6c. The ﬁrst pixel in the upper left corner of the image is
+deﬁned as the ﬁrst qubit and the serial number is 0. The def-
+inition of the remaining pixels follows the principle of
+ordering from top to bottom and from left to right. The ver-
+tices vi vj in Fig. 6d represent the pixels of the original
+image. The edges in Fig. 6d have weights wij that corre-
+spond to the association between neighboring pixels in the
+original image: If adjacent pixels are the same grayscale, the
+weight wij is deﬁned as wij¼ 0. Otherwise, the weight wij is
+set to a value between 0 and 1 based on the difference of
+grayscale [13], [20]. Vertexes and edge weights in Fig. 6d
+contain different information, so the initial quantum system
+jcini with Hamiltonian Hb and the ﬁnal quantum system
+jcouti with the Hamiltonian Hp are different for each image.
+Through an undirected weighted graph, we determine how
+quantum states and pictures are related. By sending the cre-
+ated quantum system with initial quantum state with Hb via
+PHL, an image segmentation result that is relatively precise
+may be achieved.
+There are three kinds of experiments to prove the possi-
+bility of PHLA used in image segmentation:
+1) Experiment (01) : Four-pixels experiment with three
+different grayscales.
+2) Experiment (02) : Six-pixels experiment with two dif-
+ferent grayscales.
+3) Experiment (03) : Six-pixels experiment with three
+different grayscales.
+Experiment (01) and Experiment (03) are comparisons to
+prove that PHLA can be used for different numbers of pix-
+els. Experiment (02) and Experiment (03) are the control
+groups to prove that PHLA can be used for pixels with dif-
+ferent amount of grayscales. The experimental results show
+that PHLA can give a good segmentation scheme.
+4.2 Experimental Results and Discussion
+Table 2 summarizes the results of qubits and the expectation
+of Hamiltonian in Experiment (01) on the Origin Pilot Lab
+[14]. Fig. 7 shows the results in Experiment (01). Fig. 7c rep-
+resents the position information of qubits in PHLA corre-
+sponding to each pixel. The qubit positions about the white
+pixels with the grayscale of 255 are ranked as 0 and 3, the
+black pixels with the grayscale of 0 are ranked as 1, the pixel
+with the grayscale of 94 is ranked as 2. The qubit sequence
+numbers from small to large correspond to low-order to
+high-order. The bar chart describes the evolution of the
+quantum system calculated by PHLA and the correspond-
+ing Hamiltonian expectation, where the qubit with the high-
+est expectation represents the segmentation result. In
+Table 2, the order of the highest corresponding qubits is
+j0110i. According to the expression of the qubit, the low-
+order qubit is ordered on the far right. Therefore, the result
+shows the pixels whose grayscale is not 255 are segmented
+from the white pixels, which is shown in Fig. 7.
+Table 3 summarizes the results of qubits and the expecta-
+tion of Hamiltonian in Experiment (02). Fig. 8 shows the
+results in Experiment (02). Fig. 8c represents the position
+information of the qubit in PHLA, where except for the qubit
+of 1 and 4, which describes black pixels with a grayscale of 0,
+other qubits represent white pixels with grayscales of 255. In
+Table 3, the highest Hamiltonian expectation corresponding
+Fig. 6. The Process of Quantum Image Segmentation. The ﬁgure is
+divided into ﬁve parts: Fig.ðaÞ is the original image, Fig.ðbÞ is the segmen-
+tation result, Fig.ðcÞ is the qubit position for pixel, Fig. ðdÞ is the undi-
+rected weighted network for graph G, Fig.ðeÞ is the result of boundary
+after the process of PHLA. The segmentation process from Fig. ðaÞ to
+Fig.ðbÞ can be represented by Fig.ðdÞ to Fig.ðeÞ and then ﬁg.ðbÞ.
+TABLE 2
+Results of Qubits in Experiment (01)
+System State Hðt1Þ Hðt2Þ Hðt3Þ Hðt4Þ
+Qubits Results 0101 1001 1100 1101
+Expectation of Hamiltonian 1111
+System State Hðt5Þ Hðt6Þ Hðt7Þ Hðt8Þ
+Qubits Results 1111 0011 1010 0110
+Expectation of Hamiltonian 2 11 14 69
+Fig. 7. Results in experiment (01).
+SHI ET AL.: PARAMETERIZED HAMILTONIAN LEARNING WITH QUANTUM CIRCUIT 6091
+qubits isj010010i, which shows that the black pixels are seg-
+mented from the white pixels after the original image is cal-
+culated by the PHLA, as shown in Fig. 8.
+Table 4 summarizes the results of qubits and the expecta-
+tion of Hamiltonian in Experiment (03). Fig. 9 shows the
+results in Experiment (03). Fig. 9c represents the position
+information of the qubit in the PHLA, where the position of
+qubits on 1, 3 and 5 represent the white pixels with the gray-
+scale of 255, the position of qubits on 0 and 2 are pixels with
+grayscale of 94, the position of qubits on 4 is the black pixel
+with grayscale of 0. In Table 4, the highest Hamiltonian
+expectation corresponding qubits is j010101i, which shows
+that the pixels whose grayscale is not 255 are segmented
+from the white pixels, as shown in Fig. 9.
+The loss function for Experiment (01), Experiment (02),
+and Experiment (03) are shown in Fig. 10, where the
+training step of the loss function is 200. As shown in Fig. 10,
+the loss functions of the three experiments have rapid
+downward trend and the ﬁnal results are stabilized. By
+comparing the different trends, we observe that due to the
+complexity of the original image in Experiment (01) and
+Experiment (03), the loss function has a slower downward
+trend than the Experiment (02), and the ﬁnal result is stable
+at roughly/C0 1:8. In summary, we conclude that the decline
+trend of the loss function for PHLA has a great relationship
+with the number and distribution of pixels in the original
+image [28]. But the results produced by the loss function in
+PHLA are quick convergence and tend to be stable, and the
+ﬁnal results are stable [29].
+It can be seen from the above experiments that the PHLA
+can be applied to the ﬁeld of image segmentation. This is
+the ﬁrst time that PHLA has been used in this ﬁeld, provid-
+ing new ideas for the application of HLA. The experimental
+results also conﬁrmed that the PHL we presented is effec-
+tive, which complete the task of expressing Hamiltonian
+learning with parameterized quantum circuits. Compared
+with classical Grabcut algorithm [20], the PHL algorithm
+eliminates the requirement of early manual intervention.
+Finally, according to ref. [30], we may construct an image
+segmentation model based on graph theory and quantum
+computing features with the goal of lowering computational
+complexity and assuring the correctness of the calculation
+results.
+In Table 5, we compare the PHL model with some Hamil-
+tonian learning models [21], [22], [23], [24]. The standards
+we chose are those used in quantum mechanics to evaluate
+physical quantities and system evolution. The stable adia-
+batic process is used to determine the energy change and
+system evolution is characterized by continuity and sponta-
+neity. It can be seen from the comparison that PHL ﬁts the
+TABLE 3
+Results of Qubits in Experiment (02)
+System State Hðt1Þ Hðt2Þ Hðt3Þ Hðt4Þ
+Qubits Results 010000 010101 010110 010010
+Expectation of Hamiltonian 1 1 1 97
+Fig. 8. Results in experiment (02).
+TABLE 4
+Results of Qubits in Experiment (03)
+System State Hðt1Þ Hðt2Þ Hðt3Þ Hðt4Þ Hðt5Þ Hðt6Þ Hðt7Þ Hðt8Þ Hðt9Þ Hðt10Þ Hðt11Þ
+Qubits Results 000001 000101 001101 010111 011111 100010 100100 101111 110100 111110 000000
+Expectation of Hamiltonian 1 1111111112
+System State Hðt12Þ Hðt13Þ Hðt14Þ Hðt15Þ Hðt16Þ Hðt17Þ Hðt18Þ Hðt19Þ Hðt20Þ Hðt21Þ Hðt22Þ
+Qubits Results 001100 010000 011000 011001 100101 110101 001001 110000 000100 101000 011101
+Expectation of Hamiltonian 2 2222233445
+System State Hðt23Þ Hðt24Þ Hðt25Þ Hðt26Þ Hðt27Þ Hðt28Þ Hðt29Þ Hðt30Þ Hðt31Þ Hðt32Þ
+Qubits Results 100001 111111 010110 011100 010011 110001 010010 010001 010100 010101
+Expectation of Hamiltonian 5 5679 1 3 1 5 2 0 2 4 5 3
+Fig. 9. Results in experiment (03).
+6092 IEEE TRANSACTIONS ON PATTERN ANAL YSIS AND MACHINE INTELLIGENCE, VOL. 45, NO. 5, MAY 2023
+requirements for general character and has the advantage of
+using parameterized quantum circuits to excite system
+evolution.
+In Table 6, we compare PHLA and other Hamiltonian
+learning algorithms [5], [25], [26], [27]. The standards we
+chose are about quantum mechanics, algorithm structure
+and its application. Quantum system produced by PHLA fol-
+lows standards of system evolution characteristics, including
+initial state preparation, continuous system evolution and
+Hamiltonian changing over time. As for algorithm structure,
+the most notable aspect for PHLA is the parameterized quan-
+tum circuits and the parameters are trained. In the applica-
+tion, PHLA may be used to not only prepare quantum states
+but also to solve the problem of image segmentation.
+Comparing with the classical Grabcut [20] technique based
+on graph theory, PHLA can use the parallelism of quantum
+computing to process the pixels in an image concurrently,
+reducing the need for manual intervention during the initial
+stages of the image processing. Based on the correspondence
+between pixels and qubits, PHLA has the potential to apply
+on object detection [31] in the future.
+5C ONCLUSION
+We establish parameterized Hamiltonian learning (PHL)
+and explores its application and implementation on
+quantum computers in this paper. The proposed PHL
+demonstrates how to use parameterized quantum
+Fig. 10. The loss function of experiment (01), experiment (02), and experiment (03).
+TABLE 5
+Hamiltonian Learning Model
+The Comparative Analysis of Hamiltonian Learning Model
+Standard Wiebe [21] Paesani [22] Bairey [23] Kr €amer [24] PHL
+General Character
+Deﬁnation of Initial State ✓✓✓✓ ✓
+Continuous System Evolution ✓✓✓✓ ✓
+Preparation of Quantum State ✓✓✓✓ ✓
+Individual Character
+Stable Adiabatic Process ✓✓ ✓ ✓
+Spontaneous System Evolution ✓✓✓ ✓
+Quantm Circuit ✓
+TABLE 6
+Hamiltonian Learning Algorithm
+The Comparative Analysis of Hamiltonian Learning Algorithm
+Standard Nathan [5] Nageshrao [25] Levy [26] Thomas[27] PHLA
+General Character
+Continuous System Evolution ✓✓ ✓ ✓ ✓
+System Hamiltonian Changing with Time ✓✓ ✓ ✓ ✓
+Updating Parameters ✓✓ ✓ ✓ ✓
+Practical Application ✓✓ ✓ ✓ ✓
+Individual Character
+Deﬁnation of Initial State with Hamiltonian H ✓✓ ✓ ✓
+Parameteried Quantum Circuit ✓
+Fast Convergent Loss Function ✓✓ ✓ ✓
+Stable Optimization ✓✓ ✓ ✓
+SHI ET AL.: PARAMETERIZED HAMILTONIAN LEARNING WITH QUANTUM CIRCUIT 6093
+circuits to characterize the evolution of the system,
+which provides a solid theoretical groundwork for the
+future research on application of Hamiltonian learning.
+We also develop a quantum Hamiltonian learning algo-
+rithm (PHLA) based on PHL to perform quantum state
+preparation and image segmentation. Our experimental
+results demonstrate that PH LA can provide an accurate
+image segmentation solution, by improving the loss
+function to update the circuit parameters using the gra-
+dient descent method. We believe that, with the develop-
+ment of quantum hardware, in addition to the
+advantages of preparing a quantum system with a spe-
+ciﬁc Hamiltonian, HLA has the potential to be executed
+on quantum computers in combination with PQC and
+has wide practical applications.
+REFERENCES
+[1] J. Biamonte, P. Wittek, N. Pancotti, P. Rebentrost, N. Wiebe, and S.
+Lloyd, “Quantum machine learning,” Nature, vol. 549, no. 7671,
+pp. 195–202, 2017.
+[2] F. Xiao and W. Pedrycz, “Negation of the quantum mass function
+for multisource quantum information fusion with its application
+to pattern classiﬁcation,” IEEE Trans. Pattern Anal. Mach. Intell. ,
+early access, Apr. 14, 2022, doi: 10.1109/TPAMI.2022.3167045.
+[3] H. Li et al., “An intelligent E-Nose system using quantum dots
+and deep learning algorithms,” in Proc. ECS Meeting Abstr. , 2020,
+Art. no. 1859.
+[4] L. Lamata, “Quantum machine learning and quantum biomimet-
+ics: A perspective,” Mach. Learn. Sci. Technol. , vol. 1, no. 3, Jul.
+2020, Art. no. 033002.
+[5] N. Wiebe, C. Granade, C. Ferrie, and D. G. Cory, “Hamiltonian
+learning and certiﬁcation using quantum resources,” Phys. Rev.
+Lett., vol. 112, no. 19, 2014, Art. no. 190501.
+[6] B. ¸Sahino/C21glu and R. D. Somma, “Hamiltonian simulation in the
+low-energy subspace,” NPJ Quantum Inf. , vol. 7, no. 1, pp. 1–5,
+2021.
+[7] Y. Wang, G. Li, and X. Wang, “A hybrid quantum-classical hamil-
+tonian learning algorithm,” 2021, arXiv:2103.01061.
+[8] A. Zubida, E. Yitzhaki, N. H. Lindner, and E. Bairey, “Optimal
+short-time measurements for Hamiltonian learning,” 2021,
+arXiv:2108.08824 .
+[9] M. Benedetti, E. Lloyd, S. Sack, and M. Fiorentini, “Parameterized
+quantum circuits as machine learning models,” Quantum Sci. Tech-
+nol., vol. 4, no. 4, 2019, Art. no. 043001.
+[10] J. Shi, Y. Tang, Y. Lu, Y. Feng, R. Shi, and S. Zhang, “Quantum cir-
+cuit learning with parameterized boson sampling,” IEEE Trans.
+Knowl. Data Eng. , early access, Jul. 07, 2021, doi: 10.1109/
+TKDE.2021.3095103.
+[11] T. Xin et al., “Experimental quantum principal component analy-
+sis via parametrized quantum circuits,” Phys. Rev. Lett. , vol. 126,
+no. 11, 2021, Art. no. 110502.
+[12] A. P. Adelomou, E. G. Ribe, and X. V. Cardona, “Using the param-
+eterized quantum circuit combined with variational-quantum-
+eigensolver (VQE) to create an intelligent social workers’ schedule
+problem solver,” 2020, arXiv: 2010.05863.
+[13] Y. Liu, M.-M. Cheng, X. Hu, K. Wang, and X. Bai, “Richer convo-
+lutional features for edge detection,” in Proc. IEEE Conf. Comput.
+Vis. Pattern Recognit., 2017, pp. 5872–5881.
+[14] Z.-Y. Chen, C. Xue, S.-M. Chen, and G.-P. Guo, “VQNet: Library
+for a quantum-classical hybrid neural network,” 2019, arXiv:
+1901.09133.
+[15] T. Kato, “On the adiabatic theorem of quantum mechanics,” J.
+Phys. Soc. Jpn., vol. 5, no. 6, pp. 435–439, 1950.
+[16] J. V. Neumann, “Allgemeine eigenwerttheorie hermitescher
+funktionaloperatoren,”Mathematische Annalen, vol. 102, pp. 49–131, 1930.
+[17] V. Blum, G. L. Hart, M. J. Walorski, and A. Zunger, “Using genetic
+algorithms to map ﬁrst-principles results to model Hamiltonians:
+Application to the generalized Ising model for alloys,” Phys. Rev.
+B, vol. 72, no. 16, 2005, Art. no. 165113.
+[18] Y. Xu et al., “Gliding vertex on the horizontal bounding box for
+multi-oriented object detection,” IEEE Trans. Pattern Anal. Mach.
+Intell., vol. 43, no. 4, pp. 1452–1459, Apr. 2021.
+[19] A. O. Salau, T. K. Yesufu, and B. S. Ogundare, “Vehicle plate num-
+ber localization using a modiﬁed GrabCut algorithm,” J. King Saud
+Univ. Comput. Inf. Sci., vol. 33, no. 4, pp. 399–407, 2021.
+[20] C. Rother, V. Kolmogorov, and A. Blake, “GrabCut interactive
+foreground extraction using iterated graph cuts,” ACM Trans.
+Graph., vol. 23, no. 3, pp. 309–314, 2004.
+[21] N. Wiebe, C. Granade, and D. G. Cory, “Quantum bootstrapping
+via compressed quantum Hamiltonian learning,” New J. Phys. ,
+vol. 17, no. 2, 2015, Art. no. 022005.
+[22] S. Paesani et al., “Experimental quantum Hamiltonian learning
+using a silicon photonic chip and a nitrogen-vacancy electron spin
+in diamond,” in Proc. Eur. Quantum Electron. Conf. , 2017,
+Art. no. EB_3_2.
+[23] E. Bairey, I. Arad, and N. H. Lindner, “Learning a local Hamilto-
+nian from local measurements,” Phys. Rev. Lett. , vol. 122, no. 2,
+2019, Art. no. 020504.
+[24] M. Kr €amer, P. M. Dohmen, W. Xie, D. Holub, A. S. Christensen,
+and M. Elstner, “Charge and exciton transfer simulations using
+machine-learned Hamiltonians,” J. Chem. Theory Comput. , vol. 16,
+no. 7, pp. 4061–4070, 2020.
+[25] S. P. Nageshrao, G. A. Lopes, D. Jeltsema, and R. Babu /C20ska, “Port-
+Hamiltonian systems in adaptive and learning control: A survey,”
+IEEE Trans. Autom. Control , vol. 61, no. 5, pp. 1223–1238, May
+2016.
+[26] D. Levy, M. D. Hoffman, and J. Sohl-Dickstein, “Generalizing
+Hamiltonian Monte Carlo with neural networks,” 2017, arXiv:
+1711.09268.
+[27] S. Thomas and W. Tu, “Learning Hamiltonian Monte Carlo in R,”
+Amer. Statistician, vol. 75, no. 4, pp. 403–413, 2021.
+[28] F. Nie, D. Wu, R. Wang, and X. Li, “Truncated robust principle
+component analysis with a general optimization framework,”
+IEEE Trans. Pattern Anal. Mach. Intell. , vol. 44, no. 2, pp. 1081–
+1097, Feb. 2022.
+[29] X. Li, H. Zhang, R. Wang, and F. Nie, “Multiview clustering: A
+scalable and parameter-free bipartite graph fusion method,” IEEE
+Trans. Pattern Anal. Mach. Intell. , vol. 44, no. 1, pp. 330–344, Jan.
+2022.
+[30] P. Lyu, M. Liao, C. Yao, W. Wu, and X. Bai, “Mask TextSpot-
+ter: An end-to-end trainable neural network for spotting text
+with arbitrary shapes,” in P r o c .E u r .C o n f .C o m p u t .V i s ., 2018,
+pp. 67–83.
+[31] P. Tang et al., “PCL: Proposal cluster learning for weakly super-
+vised object detection,” IEEE Trans. Pattern Anal. Mach. Intell. ,
+vol. 42, no. 1, pp. 176–191, Jan. 2020.
+Jinjing Shi (Member , IEEE) received the BS and
+PhD degrees from the School of Information Sci-
+ence and Engineering, Central South University ,
+Changsha, China, in 2008 and 2013, respectively .
+She is now an associate professor with the
+School of Computer Science and Engineering of
+Central South University . She was selected in the
+“Shenghua lieying” talent program of Central
+South University and Special Foundation for Dis-
+tinguished Y oung Scientists of Changsha in 2013
+and 2019, respectively . Her research interests
+include quantum computation and quantum cryptography . She has pre-
+sided over the National Natural Science Foundation Project of China
+and that of Hunan Province. There are 50 academic papers published in
+important international academic journals and conferences. She has
+received the second prize of natural science and the outstanding doc-
+toral dissertation of Hunan Province in 2015. She is a senior member of
+the CCF .
+Wenxuan Wang(Student Member , IEEE) received
+the BS degree from the College of Physical Science
+and T echnology , Central China Normal University ,
+Wuhan, China, in 2020. She is currently working
+toward the master degree with the School of Com-
+puter Science and Engineering, Central South Uni-
+versity , Changsha, China. Her research interests
+mainly include Hamiltonian learning, quantum state
+preparation, and quantum somputing.
+6094 IEEE TRANSACTIONS ON PATTERN ANAL YSIS AND MACHINE INTELLIGENCE, VOL. 45, NO. 5, MAY 2023
+Xiaoping Lou (Member , IEEE) is a professor
+with the College of Information Science and Engi-
+neering, Hunan Normal University , Changsha,
+China. She has long been engaged in research
+on cyberspace security , information security tech-
+nology , and cryptographic protocol design and
+analysis.
+Shichao Zhang (Senior Member , IEEE) received
+the PhD degree in computer science from the
+Deakin University , Australia. He is currently a
+China national-level-title professor with the
+School of Computer Science and T echnology ,
+Central South University , China. His research
+interests include information quality and pattern
+discovery . He has published about 90 interna-
+tional journal papers and more than 100 interna-
+tional conference papers. He has won 16
+national-class grants, and eight China provincial/
+ministerial awards. He served/is serving as an associate editor of the
+ACM Transactions on Knowledge Discovery from Data , IEEE Transac-
+tions on Knowledge and Data Engineering , Knowledge and Information
+Systems, and the IEEE Intelligent Informatics Bulletin , as conference
+chair , PC chair and vice PC chair for 10 more international conferences.
+He is a senior member of the IEEE Computer Society and a member of
+the ACM.
+Xuelong Li (Fellow , IEEE) is a full professor with the School of Artiﬁcial
+Intelligence, Optics and Electronics, Northwestern Polytechnical Univer-
+sity , Xi’an, China.
+" For more information on this or any other computing topic,
+please visit our Digital Library at www .computer .org/csdl.
+SHI ET AL.: PARAMETERIZED HAMILTONIAN LEARNING WITH QUANTUM CIRCUIT 6095

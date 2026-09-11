@@ -15,6 +15,8 @@
 | `paper/` | 论文材料：`ch3/` `ch4/` `ch5/`（正文 PDF、生成器、全部图、记录）、`outline/`（大纲/风格/批注） |
 
 ## 环境
+**新服务器从零搭建请看 [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md)（~15 分钟，含全部已知坑）。**
+
 ```bash
 # 本机环境在 /tmp 易失；重建/校验见 技能 rebuild-qcc-env（推荐）
 # 或手工：
