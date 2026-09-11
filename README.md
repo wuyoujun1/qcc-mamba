@@ -25,31 +25,39 @@ export OMP_NUM_THREADS=8                 # 本机必须，否则线程爆炸
 ```
 
 ## 复现（示例：ETTh1-96 训练 + 测试）
+先按 [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) 第 7 节把 `dataset/gz/*.csv.gz` 解压到 `/tmp` 并软链回 `dataset/`——仓库里只有 gz，`--root_path ./dataset/ETT-small/` 需要的是解压后的目录。
+
 ```bash
+export OMP_NUM_THREADS=8                # 必须
 python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data ETTh1 \
   --root_path ./dataset/ETT-small/ --data_path ETTh1.csv --features M --target OT --freq 15min \
   --seq_len 96 --label_len 48 --pred_len 96 --enc_in 7 --dec_in 7 --c_out 7 \
-  --qmix_layers 2 --n_qubits 5 --qmix_norm raw_k --offdiag True --qmix_msg H --qmix_ln_hp 1 \
-  --qmix_gate True --qmix_gate_init 0.5 --batch_size 32 --train_epochs 10 --patience 3
+  --e_layers 2 --d_model 256 --d_ff 256 --d_state 2 --learning_rate 0.00007 \
+  --qmix_layers 2 --n_qubits 5 --qmix_norm softmax --kernel_T 0.1 --offdiag \
+  --qmix_gate --qmix_gate_init 0.1 --batch_size 32 --train_epochs 10 --patience 3
 ```
 关键开关（**以论文主表实际口径为准**）：
 
 | 开关 | 主表/论文口径 | 说明 |
 |---|---|---|
-| `--qmix_norm` | `softmax` | 消息权重归一化方式；`raw_k` = 去对角保真度核直传（新理论口径，可选） |
-| `--kernel_T` | `0.1` | softmax 分支的温度（`scripts/` 上游脚本同为 0.1；0.05 出现在个别长步长） |
-| `--offdiag` | `True` | 去对角，跨变量权重占主导 |
-| `--n_qubits` | `5` | 主表口径。注意：`scripts/` 下是**上游 S-Mamba 官方脚本**，其中多用 `--n_qubits 2`，不是本论文口径 |
-| `--qmix_gate` / `--qmix_gate_init` | `True` / `0.1` | 混合门控与初值（实验研究中发现 0.5~1.0 会使耦合被模型依赖、MSE 基本不变；该配置**未用于主表**） |
-| `--qmix_msg` / `--qmix_ln_hp` | `H` / `1` | 消息来源与是否对 Hp 做 LN（实验表明 H+保留 LN 最优） |
+| `--qmix_norm` | `softmax` | 消息权重归一化方式，只实现 `avg` / `softmax` / `l1`，传其它值会在建模时直接抛 `ValueError` |
+| `--kernel_T` | `0.1` | 保真度核温度（softmax 分支） |
+| `--offdiag` | 开 | 去对角，在 `K - I` 上做 softmax，跨变量权重占主导 |
+| `--n_qubits` | `5` | 主表口径。注意 `scripts/**/Q_S_Mamba_*.sh` 里写的是 `2`，不是本论文口径 |
+| `--qmix_gate` / `--qmix_gate_init` | 开 / `0.1` | 混合门控与初值。门控尺度在验证集上选定，测试结果对其取值不敏感（变化小于 1%）；`0.5~1.0` 是耦合放大实验用的配置，**未用于主表** |
 
-> 复现主表请以上表为准；`scripts/*.sh` 是上游 S-Mamba 官方实验脚本（回看长度/编码器替换等），其超参与本论文主表并不相同。
+> `--offdiag` 与 `--qmix_gate` 都是**无参数开关**，写成 `--offdiag True` 会被 argparse 当成多余参数直接报错。
+> 早期文档里出现过的 `--qmix_norm raw_k` 与 `--qmix_msg` / `--qmix_ln_hp` **在当前 main 的代码里不存在**：前者的取值不在 `avg/softmax/l1` 内会抛错，后两个参数 run.py 根本没有定义。
+> `scripts/` 下 `S_Mamba_*.sh` 是上游 S-Mamba 官方脚本，`Q_S_Mamba_*.sh` 是我们自己的脚本；两者超参均与主表口径不完全一致，复现主表请以上表为准。
 
 ## 渲染第五章 PDF
 ```bash
 cd paper/ch5
 python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿_中文_20260905.pdf
 ```
+> **第五章的现行定版就是这个生成器**（小节为 5.1 实验设置 / 5.2 主结果 / 5.3 机制验证 / 5.4 消融 / 5.5 可解释性）。
+> 文件名是历史遗留：默认输出的 `..._20260905.pdf` 与 `..._20260909.pdf` 内容一致（仅 PDF 内部 ID 不同），改完正文重跑即可。
+> `第五章_完整修正版_95保留.tex` / `.pdf` 是**旧版**，小节编号为 5.6/5.7 且含**已删除的敏感性节**，勿据此写作。
 - 生成器 `paper/ch5/ch5cn_pdf.py`（reportlab）：正文/表格/图注都在脚本里；
 - 图在 `paper/ch5/figs/`（由 `ch5_winheat.py`、`ch5_sens_full.py` 等生成）；
 - 中文字体随仓库：`paper/ch5/cjkfont/wqy-zenhei.ttf`（可用 `QCC_CJK_FONT` 覆盖）；
@@ -57,7 +65,7 @@ python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿
 - 依赖：`reportlab`、`pillow`（已加入 requirements）。
 
 ## 实验与论文材料
-- **主表/消融/敏感性/干预（表 8）**：见 `paper/ch5/第五章初稿_中文_20260905.pdf`（生成器 `paper/ch5/ch5cn_pdf.py`）。
+- **主表/消融/干预（表 8）**：见 `paper/ch5/第五章初稿_中文_20260909.pdf`（= 生成器 `paper/ch5/ch5cn_pdf.py` 的当前输出），**这是第五章定版**。
 - **补充实验（K 可视化/ECDF/斯皮尔曼/干预脚本与结果）**：`paper/ch5/ch5_supp_20260909/`。
 - **第三/四章**：`paper/ch3/`、`paper/ch4/`；**大纲与风格**：`paper/outline/`。
 
