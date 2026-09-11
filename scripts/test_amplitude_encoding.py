@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import sys
 import os
-sys.path.insert(0, '/home/wuyoujun/ts_quantum/S-D-Mamba')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # 仓库根目录
 
 def test_amplitude_encoding():
     """测试振幅编码的安全性"""

@@ -13,7 +13,7 @@
 | ETTm2 @96 strongest pair | HULL–MULL f = 0.139 |
 | ETTh1 @720 strongest pair | HUFL–MUFL f = **0.834** (~0.83 in text), same pair as @96 |
 | Strong pairs f>0.1 share | ETTh1/ETTm2 ≈9.5%, ECL ≈0.8%, Traffic ≈1.0% |
-| **Spearman(f_offdiag, data coupling)** | ETTh1 0.071, ETTm2 0.396, ETTh2 −0.049, ETTm1 0.138; merged 4 datasets (84 pairs) **ρ=0.249, p=0.0224** — matches PDF Table 5 exactly |
+| **Spearman(f_offdiag, data coupling)** | ETTh1 0.071, ETTm2 0.396, ETTh2 −0.049, ETTm1 0.138; merged 4 datasets (84 pairs) **ρ=0.249, p=0.0224** — matches PDF Table 6 exactly |
 | Prediction case (ETTh1-96, OT) | window 310: QCCK-M 0.0337 vs S-Mamba 0.0621 (S-Mamba 45.7% higher MSE); selected by rule Δ>0 with QCC error within median±0.5IQR (anti cherry-pick) |
 
 Top-5 pairs (f, off-diagonal): ETTh1 = HUFL-MUFL 0.596, HULL-MULL 0.309, HUFL-HULL 0.055, HULL-MUFL 0.052, MUFL-LULL 0.046; ETTm2 = HULL-MULL 0.139, MULL-LULL 0.121, HUFL-LUFL 0.079, HULL-LUFL 0.079, MULL-OT 0.076.

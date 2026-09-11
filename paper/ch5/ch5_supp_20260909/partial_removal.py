@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """按比例移除耦合：最强一半 / 最弱一半 / 随机一半，测测试 MSE 变化。"""
 import os,sys,re,torch,numpy as np,argparse,glob,importlib,json
-os.chdir("/home/youjun/dataops_ws"); sys.path.insert(0,"/home/youjun/dataops_ws")
+_WS = os.environ.get("QCC_WS", "/home/youjun/dataops_ws")  # 工作副本路径（含 run.py/logs/checkpoints）
+os.chdir(_WS); sys.path.insert(0, _WS)
 import qcc.quantum_mix as qm
 from torch.utils.data import DataLoader
 SRC=open("run.py").read(); ST=SRC.index("parser = argparse.ArgumentParser"); EN=SRC.index("args = parser.parse_args()")

@@ -1,5 +1,6 @@
 import os,re,subprocess,glob,time
-os.chdir("/home/youjun/dataops_ws")
+_WS = os.environ.get("QCC_WS", "/home/youjun/dataops_ws")  # 工作副本路径（含 run.py/logs/checkpoints）
+os.chdir(_WS)
 src=open("run.py").read(); st=src.index("parser = argparse.ArgumentParser"); en=src.index("args = parser.parse_args()")
 import argparse
 ns={"argparse":argparse}; exec("\n".join(l[4:] if l.startswith("    ") else l for l in src[st:en].split("\n")),ns)

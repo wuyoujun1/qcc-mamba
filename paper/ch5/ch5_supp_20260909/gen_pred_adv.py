@@ -5,7 +5,8 @@
 输出覆盖 paper/figs/ch5_pred_ETTh1.png 与 ch5_pred_ETTh1_720.png。
 """
 import sys, re, torch, numpy as np, argparse, glob, importlib, os
-os.chdir("/home/youjun/dataops_ws"); sys.path.insert(0, "/home/youjun/dataops_ws")
+_WS = os.environ.get("QCC_WS", "/home/youjun/dataops_ws")  # 工作副本路径（含 run.py/logs/checkpoints）
+os.chdir(_WS); sys.path.insert(0, "/home/youjun/dataops_ws")
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
 
 def cfg_from_log(log):

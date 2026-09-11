@@ -153,7 +153,8 @@ description: 施金金组 TKDE 论文（QCCK/QCCE/QCCK-M，第三~五章）中�
 逐句问：①有显式主语？②句首孤指"这些/那些"？③定语堆叠→拆 which？④句间逻辑词？⑤新对象走因果链？⑥术语标准？⑦命名 QCCK/QCCE 一致、缩写首现给全称？⑧与推导扣得上？⑨AI 腔/口语/过长句？⑩有括号/破折号吗（正文禁；公式纯符号除外）？⑪出现的名词是公认专有名词可直出，还是需铺垫的自研对象？需铺垫的有没有当场解释或干脆去掉？⑫每个公式后面有没有跟一句文字解释（符号含义/为什么/有什么用）？公式有没有空降？
 
 ## 9. 项目现场指针（状态以 memory `qcc-paper-writing` 与磁盘权威稿为准）
-- 返修权威 docx：`/home/youjun/paper/Reback01-20260902_CHAPTER3_QCCM_PAPER_ZH.docx`
-- 大纲（权威）`/home/youjun/PAPER_OUTLINE_TKDE.md`；工作区 `/home/youjun/paper/`
-- 历史稿（慎引为现稿）：`paper/CHAPTER3_QCCM_PAPER_ZH(2).md`、`paper/第四章zh.md`
+- 返修权威 docx：`paper/ch3/Reback01-20260902_CHAPTER3_QCCM_PAPER_ZH.docx`
+- 大纲：`paper/outline/PAPER_OUTLINE_TKDE.md`（2026-09-11 已剥成**只留结构**）；工作区 `/home/youjun/paper/`
+- **现行正文只在仓库**：`paper/ch3/第三章修改版1.md`（**定稿**）、`paper/ch4/第四章修改2.md`、`paper/ch5/ch5cn_pdf.py`（第五章定版生成器）
+- 旧稿已从仓库删除（`CHAPTER3_QCCM_PAPER_ZH(2).md`、`第四章zh.md`、`OPUS_WRITING_BRIEF.md` 等），需要时 `git show <旧提交>:<路径>` 取回；**别再引它们当现稿**
 - 风格底稿 `paper/STYLE_GUIDE.md`；长期记忆索引 `~/.claude/projects/-home-youjun/memory/MEMORY.md`（命名/结构/偏好以该 memory 为准，改判要同步回写）

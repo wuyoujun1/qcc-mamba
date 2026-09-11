@@ -1,17 +1,17 @@
 # QCCK-M: Quantum Cross-Variable Coupling Kernel for Multivariate Time-Series Forecasting
 
-在 S-Mamba 主干上插入量子跨变量耦合模块（QCCM / QCCK-M）的长时序预测代码与论文材料。
+在 S-Mamba 主干上插入量子跨变量耦合模块（QCCK，逐层实例化为 QCCK Layer）的长时序预测代码与论文材料。
 唯一主线分支：**main**（旧的 `paper-sync` / `qmix-port` 已废弃）。
 
 ## 目录
 | 路径 | 说明 |
 |---|---|
-| `qcc/` | 量子核与混合层（`quantum_mix.py`=QCCM；`kernel.py`/`feature_map.py` 量子核） |
+| `qcc/` | 量子核与混合层（`quantum_mix.py`=QCCK Layer；`kernel.py`/`feature_map.py` 量子核与编码） |
 | `model/` | `Q_S_Mamba.py`（QCCK-M）、`S_Mamba.py`（主干基线） |
 | `layers/` `utils/` `data_provider/` `experiments/` | 主干、数据、训练框架 |
 | `run.py` | 训练/测试入口（`--is_training 1` 训练，0 测试） |
-| `scripts/` | 上游 S-Mamba 官方实验脚本（增加回看长度/换编码器等） |
-| `dataset/` | 9 个数据集（ETTh1/2、ETTm1/2、Weather、ECL、Traffic、Exchange、Beijing-AQI，gz 压缩存放） |
+| `scripts/` | `S_Mamba_*.sh` 为上游 S-Mamba 官方脚本；`Q_S_Mamba_*.sh`、`screening_*.sh` 是我们自己的脚本 |
+| `dataset/gz/` | 14 个 `.csv.gz`；论文用到其中 9 个（ETTh1/2、ETTm1/2、Weather、ECL、Traffic、Exchange、Beijing-AQI） |
 | `paper/` | 论文材料：`ch3/` `ch4/` `ch5/`（正文 PDF、生成器、全部图、记录）、`outline/`（大纲/风格/批注） |
 
 ## 环境
@@ -110,7 +110,7 @@ python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿
 - 依赖：`reportlab`、`pillow`（已加入 requirements）。
 
 ## 实验与论文材料
-- **主表/消融/干预（表 8）**：见 `paper/ch5/第五章初稿_中文_20260909.pdf`（= 生成器 `paper/ch5/ch5cn_pdf.py` 的当前输出），**这是第五章定版**。
+- **主表/消融/干预（表 7）**：见 `paper/ch5/第五章初稿_中文_20260909.pdf`（= 生成器 `paper/ch5/ch5cn_pdf.py` 的当前输出），**这是第五章定版**。
 - **补充实验（K 可视化/ECDF/斯皮尔曼/干预脚本与结果）**：`paper/ch5/ch5_supp_20260909/`。
 - **第三/四章**：`paper/ch3/`、`paper/ch4/`；**大纲与风格**：`paper/outline/`。
 

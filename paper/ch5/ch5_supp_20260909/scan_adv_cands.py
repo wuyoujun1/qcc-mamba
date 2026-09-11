@@ -1,5 +1,6 @@
 import os,sys,re,torch,numpy as np,argparse,glob,importlib
-os.chdir("/home/youjun/dataops_ws"); sys.path.insert(0,"/home/youjun/dataops_ws")
+_WS = os.environ.get("QCC_WS", "/home/youjun/dataops_ws")  # 工作副本路径（含 run.py/logs/checkpoints）
+os.chdir(_WS); sys.path.insert(0, _WS)
 def cfg_from_log(log):
     txt=open(log,encoding="utf-8",errors="ignore").read()
     ns=re.search(r"Namespace\((.+?)\)\n",txt,re.S).group(1)

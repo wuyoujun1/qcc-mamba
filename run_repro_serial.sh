@@ -2,9 +2,9 @@
 # 官方 S-Mamba 复现 —— 串行调度器（一个脚本跑完才跑下一个）
 # 用法: bash run_repro_serial.sh
 set -u
-cd /home/wuyoujun/ts_quantum/S-D-Mamba
+cd "$(dirname "$(readlink -f "$0")")"   # 仓库根目录
 # 让脚本里的 `python` 解析到 venv
-export PATH=/home/wuyoujun/qcc-mamba/.venv/bin:$PATH
+export PATH="$PWD/.venv/bin:$PATH"   # .venv 见 docs/ENVIRONMENT.md 第 8 节
 
 SCRIPTS=(
   scripts/multivariate_forecasting/ETT/S_Mamba_ETTh1.sh

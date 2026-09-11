@@ -1,8 +1,8 @@
 #!/bin/bash
 # 阶段1验证：Q_S_Mamba (qmix_layers=0) 串行跑 ETTh1/ETTh2，与阶段0 逐位对比
 set -u
-cd /home/wuyoujun/ts_quantum/S-D-Mamba
-export PATH=/home/wuyoujun/qcc-mamba/.venv/bin:$PATH
+cd "$(dirname "$(readlink -f "$0")")"   # 仓库根目录
+export PATH="$PWD/.venv/bin:$PATH"   # .venv 见 docs/ENVIRONMENT.md 第 8 节
 
 for ds in ETTh1 ETTh2; do
   s="scripts/multivariate_forecasting/ETT/Q_S_Mamba_${ds}.sh"

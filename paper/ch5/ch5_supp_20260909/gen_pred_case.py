@@ -12,7 +12,8 @@ QCCK-M 第五章补充实验 · 预测案例(prediction_case)
 输出：figs/prediction_case.png   results/case_info.txt
 """
 import sys, re, torch, numpy as np, argparse, glob, importlib, os
-os.chdir("/home/youjun/dataops_ws")
+_WS = os.environ.get("QCC_WS", "/home/youjun/dataops_ws")  # 工作副本路径（含 run.py/logs/checkpoints）
+os.chdir(_WS)
 sys.path.insert(0, "/home/youjun/dataops_ws")
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
 
