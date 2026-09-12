@@ -74,4 +74,4 @@ if __name__=="__main__":
     print(f"[{mid}|{int(frac*100)}%] base={base:.4f} 移除最强{int(frac*100)}%={mt:.4f}({(mt-base)/base*100:+.2f}%) "
           f"移除最弱{int(frac*100)}%={mb:.4f}({(mb-base)/base*100:+.2f}%) 随机={np.mean(rr):.4f}({(np.mean(rr)-base)/base*100:+.2f}%)",flush=True)
     json.dump({"id":mid,"frac":frac,"base":base,"top_delta":(mt-base)/base*100,"bot_delta":(mb-base)/base*100,
-               "rand_delta":(np.mean(rr)-base)/base*100},open(f"/home/youjun/paper/ch5_supp_20260909/partial_{mid}_{int(frac*100)}.json","w"))
+               "rand_delta":(np.mean(rr)-base)/base*100},open(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"partial_{mid}_{int(frac*100)}.json"),"w"))

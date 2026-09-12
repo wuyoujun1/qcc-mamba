@@ -25,5 +25,7 @@
 
 ## 🔧 仍待办
 
+0. **第五章改造（进行中）见 [`docs/CH5_PLAN.md`](CH5_PLAN.md)** —— 结构改 A/B/C/D、表号重排、图 2 配色、表 7 换方向；清单里有逐字草稿与今日实测证据。
+
 1. **造图脚本输出路径写死**：`paper/ch5/ch5_winheat.py`、`paper/ch5/ch5_supp_20260909/gen_pred_adv.py` 等仍输出到 `/home/youjun/paper/figs/`（不在仓库内），换机即失败。改成相对脚本的 `paper/ch5/figs/`（可加 `QCC_FIG_DIR` 覆盖）。
 2. **`raw_runs/` 未入库**：`paper/ch5/ch5_supp_20260909/raw_runs/`（150 个逐 run json/npz）只在本地，仓库只有 `summary_coupling.csv`。日后要复核斯皮尔曼/屏蔽结果需要它。
