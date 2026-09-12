@@ -100,10 +100,10 @@ python run.py --is_training 1 --model_id demo_ETTh1_96 --model Q_S_Mamba --data 
 ## 渲染第五章 PDF
 ```bash
 cd paper/ch5
-python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿_中文_20260905.pdf
+python ch5cn_pdf.py [可选:输出路径.pdf]     # 默认输出 第五章初稿_中文_20260909.pdf
 ```
 > **第五章的现行定版就是这个生成器**（小节为 5.1 实验设置 / 5.2 主结果 / 5.3 机制验证 / 5.4 消融 / 5.5 可解释性）。
-> 文件名是历史遗留：默认输出的 `..._20260905.pdf` 与 `..._20260909.pdf` 内容一致（仅 PDF 内部 ID 不同），改完正文重跑即可。
+> 定版文件名 `第五章初稿_中文_20260909.pdf` 就是生成器的默认输出（旧的 `..._20260905.pdf` 已删，两份内容本就一致，仅 PDF 内部 ID 不同）。
 - 生成器 `paper/ch5/ch5cn_pdf.py`（reportlab）：正文/表格/图注都在脚本里；
 - 图在 `paper/ch5/figs/`。仓库里的造图脚本只有三个，**且它们的输出路径目前仍写死 `/home/youjun/paper/figs/`，换机要改**：
   - `paper/ch5/ch5_winheat.py` → 耦合度-增益热力图；

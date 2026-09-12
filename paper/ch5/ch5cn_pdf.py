@@ -15,7 +15,7 @@ import os, sys
 BASE = os.path.dirname(os.path.abspath(__file__))
 FONT = os.environ.get("QCC_CJK_FONT", os.path.join(BASE, "cjkfont", "wqy-zenhei.ttf"))
 FIGS = os.path.join(BASE, "figs")
-OUT  = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "第五章初稿_中文_20260905.pdf")
+OUT  = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "第五章初稿_中文_20260909.pdf")
 pdfmetrics.registerFont(TTFont("WQY", FONT))
 pdfmetrics.registerFontFamily("WQY", normal="WQY", bold="WQY", italic="WQY", boldItalic="WQY")
 
