@@ -38,10 +38,9 @@ def varnames(ds):
 def heatmap(Farr, names, hue, title, out_supp, out_pdf):
     """C3 风格：细白格线 + 对角纯浅灰 + 数字按 WCAG 选色；色带=单色相 OKLCH。"""
     V = Farr.shape[0]
-    # 定标用「非对角最大值」：对角恒为 1 且被隐藏，若把它算进 vmax，
-    # 可见数据只用到色带下半截、colorbar 顶端还会标出永不出现的值。
-    _off = Farr[~np.eye(V, dtype=bool)]
-    vmax = max(0.01, float(np.max(_off)))
+    # 定标固定 0–1（f 按定义就在 [0,1]，对角恒 1 即上界）：
+    # 三张图尺度统一、跨盘可比，也避免"每张各按自己最大值配色"的质疑。
+    vmax = 1.0
     norm = PowerNorm(gamma=0.5, vmin=0.0, vmax=vmax)
     cmap = P.cmap(hue)
     masked = np.ma.masked_invalid(Farr.astype(float)).copy()
@@ -70,8 +69,7 @@ def heatmap(Farr, names, hue, title, out_supp, out_pdf):
     cb.set_label("coupling f", fontsize=8); cb.ax.tick_params(labelsize=7.5)
     cb.outline.set_linewidth(0.6)
     # 刻度必须落在 0–vmax 内，否则 colorbar 会标到 1.0 而数据最大只有 vmax（误导）
-    tk = np.linspace(0.0, vmax, 4)
-    cb.set_ticks(tk); cb.set_ticklabels([f"{x:.2f}" for x in tk])
+    cb.set_ticks([0.0, 0.25, 0.5, 0.75, 1.0])
     fig.tight_layout()
     for op in (out_supp, out_pdf):
         fig.savefig(op, dpi=300)
