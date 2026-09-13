@@ -2,12 +2,20 @@
 """图1：QCCK-M 相对 S-Mamba 的 MSE 降低百分比（9 盘 × 4 预测长），高分辨率。
 数值与主表同源：S-Mamba 取官方复现（含 Traffic/Exchange 个别覆盖），QCC 取 md 主表。
 """
+import os, sys
 import numpy as np
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE)
+import palette_qcc as P
+# 中文字体（仓库自带 wqy）
+import matplotlib.font_manager as _fm
+_fm.fontManager.addfont(os.path.join(BASE, "cjkfont", "wqy-zenhei.ttf"))
+plt.rcParams["font.sans-serif"] = ["WenQuanYi Zen Hei", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
 
-WD = "/home/youjun/dataops_ws"
-MD = open(f"{WD}/第五章_主表消融_MSEMAE_20260904.md", encoding="utf-8").read()
+MD = open(os.environ.get("QCC_DATA_MD", os.path.join(BASE, "data", "第五章_主表消融_MSEMAE_20260904.md")), encoding="utf-8").read()
 
 def parse_md_main(part):
     lines = [l for l in part.splitlines() if l.startswith("|")]
@@ -52,7 +60,7 @@ vmax = max(1.0, float(np.nanmax(G)))
 D = G.T  # (4, 9) rows=horizon, cols=dataset
 HROWS = ["720", "336", "192", "96"]
 D = np.array([D[HS.index(h)] for h in HROWS])  # top=720
-cmap = plt.get_cmap("Blues")
+cmap = P.cmap("深青")   # 唯一冷色：与三张暖色耦合图区分
 fig, ax = plt.subplots(figsize=(10.0, 4.6), dpi=300)
 X, Y = np.meshgrid(np.arange(D.shape[1] + 1), np.arange(D.shape[0] + 1))
 pcm = ax.pcolormesh(X, Y, D, cmap=cmap, vmin=0, vmax=vmax, edgecolor="white",
@@ -66,14 +74,12 @@ for i in range(len(HROWS)):
         v = D[i, j]
         if np.isnan(v): continue
         txt = f"{v:.1f}" if abs(v) < 9.5 else f"{v:.0f}"
-        c = cmap(min(1.0, v / vmax))[:3]
-        lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
-        ax.text(j + 0.5, i + 0.5, txt, ha="center", va="center", fontsize=12,
-                fontweight="bold", color="black" if lum > 0.5 else "white")
+        ax.text(j + 0.5, i + 0.5, txt, ha="center", va="center", fontsize=13,
+                color=P.text_on(cmap(min(1.0, v / vmax))[:3]))
 cb = fig.colorbar(pcm, ax=ax, fraction=0.028, pad=0.02)
 cb.set_label("相对 S-Mamba 的 MSE 降低 (%)", fontsize=11)
 cb.ax.tick_params(labelsize=10)
 fig.tight_layout()
-fig.savefig("/home/youjun/paper/figs/ch5_winheat.png", dpi=300, bbox_inches="tight")
+fig.savefig(os.path.join(BASE, "figs", "ch5_winheat.png"), dpi=300, bbox_inches="tight")
 print("saved ch5_winheat.png ; max imp =", round(float(np.nanmax(G)), 2),
       "Beijing:", [f"{G[8,j]:.1f}" for j in range(4)])
