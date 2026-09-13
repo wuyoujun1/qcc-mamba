@@ -6,13 +6,13 @@
 """
 import sys, re, torch, numpy as np, argparse, glob, importlib, os
 _WS = os.environ.get("QCC_WS", "/home/youjun/dataops_ws")  # 工作副本路径（含 run.py/logs/checkpoints）
-os.chdir(_WS); sys.path.insert(0, "/home/youjun/dataops_ws")
+os.chdir(_WS); sys.path.insert(0, _WS)
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
 
 def cfg_from_log(log):
     txt = open(log, encoding="utf-8", errors="ignore").read()
     ns = re.search(r"Namespace\((.+?)\)\n", txt, re.S).group(1)
-    src = open("/home/youjun/dataops_ws/run.py").read()
+    src = open(os.path.join(_WS, "run.py")).read()
     st = src.index("parser = argparse.ArgumentParser"); en = src.index("args = parser.parse_args()")
     nd = {"argparse": argparse}
     exec("\n".join(l[4:] if l.startswith("    ") else l for l in src[st:en].split("\n")), nd)
@@ -92,6 +92,6 @@ for qmid, smid, H, out in jobs:
     ax.text(0.01, 0.03, f"window MSE  QCCK-M {qmse[j]:.4f} / S-Mamba {smse[j]:.4f}",
             transform=ax.transAxes, fontsize=8)
     fig.tight_layout()
-    fig.savefig(f"/home/youjun/paper/figs/{out}", dpi=200)
+    fig.savefig(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "figs", out), dpi=200)
     plt.close(fig)
     print(f"H={H}: 窗{j} qcc={qmse[j]:.4f} sm={smse[j]:.4f} 提升={imp:.1f}% -> {out}", flush=True)
