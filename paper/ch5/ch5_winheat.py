@@ -60,7 +60,7 @@ vmax = max(1.0, float(np.nanmax(G)))
 D = G.T  # (4, 9) rows=horizon, cols=dataset
 HROWS = ["720", "336", "192", "96"]
 D = np.array([D[HS.index(h)] for h in HROWS])  # top=720
-cmap = P.cmap("深青")   # 唯一冷色：与三张暖色耦合图区分
+cmap = plt.get_cmap("Blues")   # 保持原配色（用户 2026-09-13 定：图1 不改色）
 fig, ax = plt.subplots(figsize=(10.0, 4.6), dpi=300)
 X, Y = np.meshgrid(np.arange(D.shape[1] + 1), np.arange(D.shape[0] + 1))
 pcm = ax.pcolormesh(X, Y, D, cmap=cmap, vmin=0, vmax=vmax, edgecolor="white",
@@ -74,8 +74,10 @@ for i in range(len(HROWS)):
         v = D[i, j]
         if np.isnan(v): continue
         txt = f"{v:.1f}" if abs(v) < 9.5 else f"{v:.0f}"
-        ax.text(j + 0.5, i + 0.5, txt, ha="center", va="center", fontsize=13,
-                color=P.text_on(cmap(min(1.0, v / vmax))[:3]))
+        c = cmap(min(1.0, v / vmax))[:3]
+        lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+        ax.text(j + 0.5, i + 0.5, txt, ha="center", va="center", fontsize=12,
+                fontweight="bold", color="black" if lum > 0.5 else "white")
 cb = fig.colorbar(pcm, ax=ax, fraction=0.028, pad=0.02)
 cb.set_label("相对 S-Mamba 的 MSE 降低 (%)", fontsize=11)
 cb.ax.tick_params(labelsize=10)
