@@ -1,0 +1,120 @@
+%% ============================================================
+%% 第二章 相关工作（中文版）
+%% 结构：2.1 基础知识（量子计算基础）→ 2.2 量子核方法 → 2.3 S-Mamba
+%% 写法：全节当"说明书"写，只作客观陈述，不举例子、不评价意义；
+%%       S-Mamba 一节是本规则的唯一例外。
+%% 公式：公式前一律写"xxxx 定义如式~(\ref{...}) 所示"。
+%%       编号口径（2026-09-22 定）：通用定义落在本章，本文实例落在第三、
+%%       四章，同一概念只定义一次。本章 (1) 振幅编码、(2) 相位编码、
+%%       (3) 联合编码、(4) 保真度核；(5) 参数化量子线路形式引自第三章
+%%       \ref{eq:circuit}（后写，故提上来由本章铺垫）。附录 A 给出
+%%       本文所用门（$R_Y$、$R_Z$、CNOT）的定义。
+%% 编译：xelatex（ctex）
+%% ============================================================
+
+\section{相关工作}
+
+\subsection{基础知识}
+
+量子电路是量子计算的基本计算单元，由作用在量子比特上的量子门组合而成，其中量子门通过纠缠操作使多个量子比特的状态产生关联，其具体定义见附录~\ref{app:quantum}。
+量子编码负责把经典数据映射为量子态，常用方式是振幅编码与相位编码，即把数据信息分别加载到量子态的振幅和相位两个自由度上。
+振幅编码把数据写成各计算基态的概率幅，其定义如式~(\ref{eq:amp-encoding}) 所示。
+\begin{equation}
+\label{eq:amp-encoding}
+|\psi\rangle = \sum_{i=1}^{2^n} a_i\,|i\rangle,
+\end{equation}
+式中 $n$ 为量子比特数，$|i\rangle$ 为第 $i$ 个计算基态，$a_i$ 为对应的概率幅，其模方 $|a_i|^2$ 给出基态 $|i\rangle$ 被测量到的概率。
+相位编码把数据写进各计算基态的相位，其定义如式~(\ref{eq:phase-encoding}) 所示。
+\begin{equation}
+\label{eq:phase-encoding}
+|\psi\rangle = \frac{1}{\sqrt{2^n}}\sum_{i=1}^{2^n} e^{\,i\theta_i}\,|i\rangle,
+\end{equation}
+式中 $\theta_i$ 为基态 $|i\rangle$ 携带的相位，它不改变各基态被测量到的概率，而是改变基态之间的相对相位。
+振幅与相位是量子态相互独立的两个自由度，两种编码可以结合使用，其定义如式~(\ref{eq:joint-encoding}) 所示。
+\begin{equation}
+\label{eq:joint-encoding}
+|\psi\rangle = \sum_{i=1}^{2^n} \sqrt{p_i}\,e^{\,i\theta_i}\,|i\rangle,
+\end{equation}
+式中 $p_i$ 与 $\theta_i$ 分别为基态 $|i\rangle$ 的振幅概率与相位，二者分别承载不同类型的数据信息。
+参数化量子线路是量子电路中旋转角可学习的一类线路，它由单比特旋转门与双比特纠缠门交替构成：旋转门调节各比特的振幅与相位，为线路提供可调节的自由度；纠缠门在比特之间建立纠缠，使线路输出能够携带比特之间的关联；旋转角在训练中与其他网络参数一同优化。各门的定义见附录~\ref{app:quantum}。
+本文方法所使用的参数化量子线路由旋转门 $R_Y$、$R_Z$ 与纠缠门 CNOT 构成，其对每个变量独立可学习，线路形式如式~(\ref{eq:circuit}) 所示。
+
+\subsection{量子核方法}
+
+量子核方法可以理解为一种衡量两条数据有多相似的工具。
+它的流程是：输入两条经典数据 $x_i$ 与 $x_j$；把两条数据分别经量子电路编码为量子态 $|\phi(x_i)\rangle$ 与 $|\phi(x_j)\rangle$，这一步把数据抬高到高维的量子希尔伯特空间；两个量子态做内积得到核值；最后输出一个相似度，供下游任务使用。
+核值的定义如式~(\ref{eq:qkernel}) 所示。
+\begin{equation}
+\label{eq:qkernel}
+K(x_i,x_j) = |\langle \phi(x_i)\,|\,\phi(x_j)\rangle|^2,
+\end{equation}
+式中 $\langle\cdot\,|\,\cdot\rangle$ 为希尔伯特空间上的内积，其模方给出两个量子态的重叠程度，核值越大说明两条数据在量子特征空间中越相似，核值介于 0 与 1 之间。
+两个量子态的内积模方即二者的保真度，因此式~(\ref{eq:qkernel}) 给出的核也称为保真度核。
+保真度核按对象两两计算，全部核值构成一份相似度矩阵，其每个元素表示一对对象之间的耦合强度，取值可以直接读取与比较。
+由于量子态的振幅和相位都可以携带信息，量子核能够表达经典核函数难以刻画的高维非线性关系。
+
+\subsection{S-Mamba}
+
+S-Mamba 的结构如图~\ref{fig:smamba} 所示，其架构如下\cite{wang2025smamba}：它把多变量序列的每个变量视为一个 token 进行嵌入，得到变量 token 序列 $u_1,\dots,u_V$；随后该序列正向送入一次 Mamba 层\cite{gu2024mamba}，反向再送入一次，两次扫描的输出相加；相加结果再经前馈网络与残差连接增强，最后经过一个投影层输出未来预测值。
+其中，变量 token 序列的排列方向为变量维，两次状态空间扫描均沿变量维进行，这正是 S-Mamba 刻画变量间关系的方式；前馈网络则作用于每个变量自身的时序表示。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  >=Stealth,
+  blk/.style={draw, rounded corners=2pt, align=center, inner sep=3pt,
+              minimum height=8mm, text width=16mm},
+  cell/.style={draw, rounded corners=1.5pt, align=center, inner sep=0pt,
+               minimum width=7.4mm, minimum height=5.4mm},
+  lab/.style={font=\scriptsize, align=center, text width=15mm},
+  arr/.style={->, semithick},
+  note/.style={font=\scriptsize, text=black!70}
+]
+% ---- input ----
+\node[blk] (x) at (0.75,0) {Input $X$\\$V\!\times\! L$};
+
+% ---- forward scan: variate axis, 1 -> V ----
+\node[lab]  (lf) at (3.25, 0.62) {Forward\\$1\to V$};
+\node[cell, fill=black!6]  (f1) at (4.85, 0.62) {$u_1$};
+\node[cell, fill=black!6]  (f2) at (6.10, 0.62) {$u_2$};
+\node[cell, fill=black!6]  (fV) at (8.10, 0.62) {$u_V$};
+
+% ---- backward scan: variate axis, V -> 1 ----
+\node[lab]  (lb) at (3.25,-0.62) {Backward\\$V\to 1$};
+\node[cell, fill=black!16] (b1) at (4.85,-0.62) {$u_1$};
+\node[cell, fill=black!16] (b2) at (6.10,-0.62) {$u_2$};
+\node[cell, fill=black!16] (bV) at (8.10,-0.62) {$u_V$};
+
+% ---- enclosing block (unlabelled) ----
+\begin{scope}[on background layer]
+\node[draw, dashed, rounded corners=3pt, inner sep=6pt, fill=black!3,
+      fit=(lf)(lb)(fV)(bV)] (grp) {};
+\end{scope}
+
+% ---- scan directions ----
+\draw[arr] (f1.east) -- (f2.west);
+\draw[arr] (f2.east) -- (6.90, 0.62);
+\node[note, inner sep=1pt] at (7.10, 0.62) {$\cdots$};
+\draw[arr] (7.30, 0.62) -- (fV.west);
+
+\draw[arr] (b2.west) -- (b1.east);
+\draw[arr] (bV.west) -- (7.30,-0.62);
+\node[note, inner sep=1pt] at (7.10,-0.62) {$\cdots$};
+\draw[arr] (6.90,-0.62) -- (b2.east);
+
+% ---- fusion and output ----
+\node[circle, draw, inner sep=0pt, minimum size=5.8mm] (plus) at (10.1,0) {$+$};
+\draw[arr] (x.east) -- (grp.west);
+\draw[arr] (fV.east) -| (plus.north);
+\draw[arr] (bV.east) -| (plus.south);
+\node[blk] (y) at (12.35,0) {Output $\hat{Y}$\\$V\!\times\! T$};
+\draw[arr] (plus.east) -- (y.west);
+\end{tikzpicture}
+\caption{S-Mamba 的双向结构示意图。}
+\label{fig:smamba}
+\end{figure}
+
+跨变量耦合指的是同一时刻下不同变量之间的相互依赖关系。
+在多变量序列中，变量之间通常并不彼此独立，一个变量的取值会携带其他变量的信息，因此模型能否刻画跨变量耦合，决定了它能否利用这些信息。
+S-Mamba 的双向扫描沿变量维逐位传递信息，变量间耦合只能被隐式携带于各变量的隐状态之中，模型没有显式环节对它加以刻画。

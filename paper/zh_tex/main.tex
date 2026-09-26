@@ -1,0 +1,54 @@
+%% ============================================================
+%% QCCK-Model 中文总文档（摘要 + 六章 + 参考文献）
+%% 编译：xelatex（ctex 需要 xelatex 或 lualatex），跑两遍出目录
+%%       Overleaf 中请确认 Menu -> Compiler 选 XeLaTeX
+%% 结构：各章正文分别放在 chapter0_abstract_zh / chapter1_intro_zh /
+%%       chapter2_related_zh / chapter3_qcck_zh / chapter4_qcckm_zh /
+%%       chapter5_qcckm_exp_zh / chapter6_conclusion_zh / references
+%%       （均为纯正文文件），由本文件统一编译。
+%% 编号：摘要与参考文献用 \section*（不编号），故引言=1、相关工作=2、
+%%       QCCK=3、QCCK-M=4、实验=5、结论=6。
+%% 图：第五章插图由 \ifchfivefigs 开关控制，当前 true（含插图版）。
+%%     插图文件在 ch5/figs/ 下，共 6 张。
+%% ============================================================
+\documentclass[10pt,a4paper]{article}
+
+\usepackage{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{xcolor}
+\usepackage{longtable}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+
+\newif\ifchfivefigs
+\chfivefigstrue
+
+
+
+\begin{document}
+
+
+
+
+\input{chapter0_abstract_zh}
+\input{chapter1_intro_zh}
+\input{chapter2_related_zh}
+\input{chapter3_qcck_zh}
+\input{chapter4_qcckm_zh}
+\input{chapter5_qcckm_exp_zh}
+\input{chapter6_conclusion_zh}
+
+\appendix
+\renewcommand{\theequation}{A.\arabic{equation}}
+\setcounter{equation}{0}
+\input{chapter7_appendix_zh}
+
+\input{references}
+
+\end{document}

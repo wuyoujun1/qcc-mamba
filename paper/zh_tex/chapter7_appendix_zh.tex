@@ -1,0 +1,74 @@
+%% ============================================================
+%% 附录 A 量子门与量子电路（中文版）
+%% 作用：承接第二章 2.1「其具体定义见附录 A」的指向。
+%% 内容：量子比特与量子态记号 → 量子门定义 → 本文用到的
+%%       单比特旋转门 RY / RZ → 双比特纠缠门 CNOT → 参数化量子线路。
+%% 纪律：只作定义性陈述，给出符号含义与作用，不评价意义。
+%% 编译：xelatex（ctex）；由 main.tex 以 \appendix 引入，编号为 A。
+%% ============================================================
+
+\section{量子门与量子电路}\label{app:quantum}
+
+本附录给出 2.1 节所述量子门与量子电路的具体定义，包括量子比特与量子态的记号、量子门的定义、本文所用到的单比特旋转门 $R_Y$ 与 $R_Z$、双比特纠缠门 CNOT，以及由这些门构成的参数化量子线路。
+
+\subsection{量子比特与量子态}
+
+量子比特是量子计算的基本信息单元，其状态记作 $|\psi\rangle = \alpha|0\rangle + \beta|1\rangle$，其定义如式~(\ref{eq:app-qubit}) 所示。
+\begin{equation}
+\label{eq:app-qubit}
+|\psi\rangle = \alpha\,|0\rangle + \beta\,|1\rangle,\qquad |\alpha|^2+|\beta|^2=1,
+\end{equation}
+式中 $|0\rangle$、$|1\rangle$ 为一组标准正交基，称为计算基；$\alpha,\beta\in\mathbb{C}$ 为振幅，其模方 $|\alpha|^2$、$|\beta|^2$ 分别给出测量后得到 $|0\rangle$、$|1\rangle$ 的概率。
+
+$n$ 个量子比特构成一个系统，其状态位于 $2^n$ 维复希尔伯特空间 $\mathbb{C}^{2^n}$ 之中，计算基记作 $|b\rangle$，其中 $b\in\{0,1\}^n$ 为比特串，共有 $2^n$ 个，系统的状态为各计算基的叠加，其定义如式~(\ref{eq:app-nqubit}) 所示。
+\begin{equation}
+\label{eq:app-nqubit}
+|\psi\rangle = \sum_{b\in\{0,1\}^n} a_b\,|b\rangle,\qquad \sum_{b\in\{0,1\}^n}|a_b|^2 = 1,
+\end{equation}
+式中 $a_b$ 为计算基 $|b\rangle$ 的振幅。把 $|\psi\rangle$ 与 $|\phi\rangle$ 两个子系统的状态组合为整体状态时使用张量积 $|\psi\rangle\otimes|\phi\rangle$，该式常简记为 $|\psi\rangle|\phi\rangle$。
+
+\subsection{量子门}
+
+量子门是作用在量子比特状态上的酉算符，其定义如式~(\ref{eq:app-gate}) 所示。
+\begin{equation}
+\label{eq:app-gate}
+|\psi\rangle \mapsto U\,|\psi\rangle,\qquad U^{\dagger}U = I,
+\end{equation}
+式中 $U$ 为量子门的算符形式，$U^{\dagger}$ 为其共轭转置，$I$ 为单位阵。酉性保证变换后各振幅的模方之和仍为 1，因此量子门的演化不改变测量概率的归一化。
+
+在计算基下，作用于 $n$ 个量子比特的门表示为 $2^n\times 2^n$ 的酉矩阵，其中只作用于单个量子比特的门称为单比特门，其形式为 $2\times 2$ 的酉矩阵。
+量子门分为两类：单比特门只改变该比特自身的振幅与相位；同时作用于多个量子比特的门能够在比特之间建立关联，这类门称为纠缠门。
+把若干量子门按时间顺序依次施加到量子比特上，即多个酉算符依序相乘，得到的整体算符 $U = U_1 U_2 \cdots U_k$ 就构成量子电路的一次演化。
+
+\subsection{单比特旋转门}
+
+参数化旋转门以旋转角为参数，使量子比特的状态绕指定的坐标轴连续旋转。绕 $Y$ 轴的旋转门 $R_Y$ 的定义如式~(\ref{eq:app-ry}) 所示。
+\begin{equation}
+\label{eq:app-ry}
+R_Y(\theta) = \cos\frac{\theta}{2}\,I - i\sin\frac{\theta}{2}\,Y = \begin{pmatrix} \cos\frac{\theta}{2} & -\sin\frac{\theta}{2} \\[3pt] \sin\frac{\theta}{2} & \cos\frac{\theta}{2} \end{pmatrix},
+\end{equation}
+式中 $\theta$ 为旋转角，$Y=\begin{pmatrix}0&-i\\ i&0\end{pmatrix}$ 为泡利 $Y$ 矩阵。$R_Y$ 改变两个计算基的振幅分配，因而改变测量得到 $|0\rangle$ 与 $|1\rangle$ 的概率。
+
+绕 $Z$ 轴的旋转门 $R_Z$ 的定义如式~(\ref{eq:app-rz}) 所示。
+\begin{equation}
+\label{eq:app-rz}
+R_Z(\theta) = \cos\frac{\theta}{2}\,I - i\sin\frac{\theta}{2}\,Z = \begin{pmatrix} e^{-i\theta/2} & 0 \\ 0 & e^{i\theta/2} \end{pmatrix},
+\end{equation}
+式中 $Z=\begin{pmatrix}1&0\\0&-1\end{pmatrix}$ 为泡利 $Z$ 矩阵。$R_Z$ 只改变两个计算基之间的相对相位，不改变二者的测量概率。式~(\ref{eq:app-ry}) 与式~(\ref{eq:app-rz}) 中的旋转角 $\theta$ 可取任意实数，选择不同的旋转角即可连续调节该比特的状态。
+
+\subsection{双比特纠缠门}
+
+受控非门 CNOT 是作用在两个量子比特上的纠缠门，其定义如式~(\ref{eq:app-cnot}) 所示。
+\begin{equation}
+\label{eq:app-cnot}
+\mathrm{CNOT} = |0\rangle\langle 0|\otimes I + |1\rangle\langle 1|\otimes X,\qquad X=\begin{pmatrix}0&1\\1&0\end{pmatrix},
+\end{equation}
+式中 $X$ 为泡利 $X$ 矩阵，$\otimes$ 为张量积。在计算基下，CNOT 按 $|a,b\rangle\mapsto|a,\,a\oplus b\rangle$ 作用，其中第一个比特为控制比特、第二个比特为受控比特，$\oplus$ 为模 2 加法：控制比特为 $|0\rangle$ 时受控比特保持不变，控制比特为 $|1\rangle$ 时受控比特取反。
+
+一个纠缠门作用之后，多个量子比特的整体状态一般不能写成各单比特状态张量积的形式；当系统处于这样的状态时，称这些量子比特之间存在纠缠，此时对其中一个比特的测量结果与其余比特的测量结果相关联。纠缠门的作用是把各比特的振幅与相位耦合起来，其输出能够携带比特之间的关联。
+
+\subsection{参数化量子线路}
+
+参数化量子线路是由单比特旋转门与双比特纠缠门交替构成、且旋转角可学习的一类量子电路。旋转门负责调节各比特的振幅与相位，为线路提供可调节的自由度；纠缠门负责在比特之间建立纠缠，使线路输出能够携带比特之间的关联；旋转角在训练中与其他网络参数一同优化。
+
+本文在 QCCE 中使用的参数化量子线路，由式~(\ref{eq:app-ry})、(\ref{eq:app-rz}) 的旋转门与式~(\ref{eq:app-cnot}) 的纠缠门构成，其对每个变量独立可学习，具体形式如第三章式~(\ref{eq:circuit}) 所示。
